@@ -79,7 +79,7 @@ jobs:
         run: |
           VERSION=$(.venv/bin/python -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("assistant_email/__init__.py").read()).group(1))')
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          ./packaging/make_dmg.sh "$VERSION"
+          bash packaging/make_dmg.sh "$VERSION"
 
       - name: Notariser (si un compte Apple Developer est configuré)
         if: ${{ env.APPLE_ID != '' }}
