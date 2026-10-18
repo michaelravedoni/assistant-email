@@ -14,8 +14,9 @@ OPTIONS = {
     "argv_emulation": False,
     "iconfile": "assistant_email/assets/icone.icns",
     "arch": "universal2",
-    "packages": ["assistant_email", "webview", "rumps", "objc", "PyObjCTools", "AppKit", "Foundation", "WebKit",
-                 "Quartz", "Security", "UniformTypeIdentifiers", "bottle", "proxy_tools", "typing_extensions"],
+    "packages": ["assistant_email", "webview", "rumps", "objc", "bottle", "proxy_tools"],
+    "includes": ["AppKit", "Foundation", "WebKit", "Quartz", "Security", "PyObjCTools.AppHelper",
+                 "typing_extensions"],
     "excludes": ["tkinter", "test", "unittest.mock"],
     "plist": {
         "CFBundleName": "Assistant Email",
