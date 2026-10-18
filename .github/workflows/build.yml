@@ -1,0 +1,100 @@
+name: Construire l'application
+
+# Se lance à chaque envoi sur main, et à la main. Une étiquette « v0.3.0 » publie en plus une version (Release)
+# avec le fichier .dmg à télécharger.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12.8"
+
+jobs:
+  macos:
+    runs-on: macos-14
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python universel (Intel + Apple Silicon)
+        run: |
+          curl -fsSL -o python.pkg "https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-macos11.pkg"
+          sudo installer -pkg python.pkg -target /
+          PY="/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
+          "$PY" -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt py2app pillow
+          lipo -archs .venv/bin/python || true
+          file "$PY"
+
+      - name: Tests
+        run: .venv/bin/python tests/test_assistant.py
+
+      - name: Icônes (régénérées)
+        run: .venv/bin/python tools/make_icons.py
+
+      - name: Construire l'application
+        run: .venv/bin/python setup.py py2app
+
+      - name: Vérifier les architectures
+        run: |
+          BIN="dist/Assistant Email.app/Contents/MacOS/Assistant Email"
+          lipo -archs "$BIN"
+          lipo -archs "$BIN" | grep -q arm64
+          lipo -archs "$BIN" | grep -q x86_64
+
+      - name: Signer (certificat Developer ID si fourni, sinon signature locale)
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+        run: |
+          APP="dist/Assistant Email.app"
+          if [ -n "$APPLE_CERT_P12" ]; then
+            echo "$APPLE_CERT_P12" | base64 --decode > cert.p12
+            security create-keychain -p ci build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p ci build.keychain
+            security import cert.p12 -k build.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+            codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGN_IDENTITY" "$APP"
+          else
+            codesign --force --deep --sign - "$APP"
+          fi
+          codesign --verify --deep --strict "$APP"
+
+      - name: Test de l'application construite
+        run: |
+          "dist/Assistant Email.app/Contents/MacOS/Assistant Email" --selftest
+
+      - name: Fabriquer le .dmg
+        run: |
+          VERSION=$(.venv/bin/python -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("assistant_email/__init__.py").read()).group(1))')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          ./packaging/make_dmg.sh "$VERSION"
+
+      - name: Notariser (si un compte Apple Developer est configuré)
+        if: ${{ env.APPLE_ID != '' }}
+        run: |
+          xcrun notarytool submit "AssistantEmail-$VERSION.dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "AssistantEmail-$VERSION.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AssistantEmail-dmg
+          path: AssistantEmail-*.dmg
+
+      - name: Publier la version
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AssistantEmail-*.dmg
+          generate_release_notes: true

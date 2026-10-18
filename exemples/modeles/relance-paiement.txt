@@ -1,0 +1,8 @@
+Relance de paiement (ton cordial, premier rappel)
+
+Bonjour,
+
+Sauf erreur de ma part, la facture n° [numéro] du [date], d'un montant de [montant] CHF, reste ouverte.
+Pourriez-vous me confirmer la date de paiement prévue ? Si le règlement a déjà été effectué, merci de ne pas tenir compte de ce message.
+
+Avec mes meilleures salutations

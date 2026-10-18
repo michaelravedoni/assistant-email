@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assistant Email</title>
+<style>
+:root {
+  --bg: #f6f6f8; --sidebar: #ececf0; --panel: #ffffff; --raised: #ffffff;
+  --text: #1d1d1f; --text-2: #55555c; --muted: #8a8a92; --line: rgba(0,0,0,.09); --line-2: rgba(0,0,0,.16);
+  --accent: #0a66d8; --accent-hover: #0858bb; --accent-soft: rgba(10,102,216,.10); --on-accent: #fff;
+  --danger: #d1342f; --ok: #1f8a43; --warn: #b56a00;
+  --field: #f2f2f5; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 24px rgba(0,0,0,.06);
+  --r: 12px; --r-s: 8px;
+  --me: #e8f0fd;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #19191b; --sidebar: #222225; --panel: #232326; --raised: #2b2b2f;
+    --text: #f2f2f5; --text-2: #c2c2c8; --muted: #8c8c94; --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.16);
+    --accent: #3d8bfd; --accent-hover: #5a9cff; --accent-soft: rgba(61,139,253,.16); --on-accent: #fff;
+    --danger: #ff6961; --ok: #4fd27b; --warn: #ffb340;
+    --field: #1c1c1f; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
+    --me: #22324a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); overflow: hidden;
+  font: 13.5px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.hidden { display: none !important; }
+
+/* ---------- mise en page ---------- */
+.app { display: grid; grid-template-columns: 300px minmax(320px, 1fr) minmax(420px, 1.15fr); height: 100vh; }
+.sidebar { background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.reader { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.composer { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.scroll { overflow-y: auto; min-height: 0; flex: 1; }
+
+/* ---------- barre latérale ---------- */
+.brand { display: flex; align-items: center; gap: 10px; padding: 16px 16px 10px; }
+.logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(145deg, #4f9bff, #0a5fd0);
+  display: grid; place-items: center; color: #fff; font-size: 16px; box-shadow: 0 2px 6px rgba(10,102,216,.35); }
+.brand b { font-size: 14px; letter-spacing: -.01em; }
+.brand small { display: block; color: var(--muted); font-size: 11.5px; margin-top: -2px; }
+.profile-select { margin: 4px 12px 12px; position: relative; }
+.profile-select select { width: 100%; appearance: none; -webkit-appearance: none; background: var(--raised); border: 1px solid var(--line);
+  border-radius: var(--r-s); padding: 8px 30px 8px 12px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 1px rgba(0,0,0,.03); }
+.profile-select::after { content: "⌄"; position: absolute; right: 12px; top: 5px; color: var(--muted); pointer-events: none; font-size: 15px; }
+.seg { display: flex; background: rgba(0,0,0,.06); border-radius: 9px; padding: 2px; margin: 0 12px 10px; }
+@media (prefers-color-scheme: dark) { .seg { background: rgba(255,255,255,.07); } }
+.seg button { flex: 1; border: none; background: none; padding: 5px 4px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 12.5px; }
+.seg button.on { background: var(--raised); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.src-tools { display: flex; gap: 6px; padding: 0 12px 8px; }
+.src-tools select { flex: 1; min-width: 0; }
+.msg-list { padding: 0 8px 8px; }
+.msg-item { padding: 9px 10px; border-radius: var(--r-s); cursor: pointer; margin-bottom: 2px; }
+.msg-item:hover { background: rgba(0,0,0,.04); }
+@media (prefers-color-scheme: dark) { .msg-item:hover { background: rgba(255,255,255,.05); } }
+.msg-item.on { background: var(--accent); color: var(--on-accent); }
+.msg-item.on .meta, .msg-item.on .date { color: rgba(255,255,255,.82); }
+.msg-item .top { display: flex; gap: 8px; align-items: baseline; }
+.msg-item .from { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-item .date { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.msg-item .meta { color: var(--text-2); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-pane { padding: 4px 12px 12px; }
+.side-pane p { color: var(--text-2); margin: 4px 0 12px; font-size: 12.5px; }
+.side-foot { border-top: 1px solid var(--line); padding: 8px; display: flex; gap: 4px; }
+.side-foot button { flex: 1; }
+.empty { color: var(--muted); text-align: center; padding: 28px 16px; font-size: 12.5px; }
+.empty .big { font-size: 26px; display: block; margin-bottom: 6px; opacity: .6; }
+
+/* ---------- commandes ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: var(--r-s);
+  padding: 7px 14px; font-weight: 600; cursor: pointer; background: var(--accent); color: var(--on-accent); white-space: nowrap;
+  transition: background .12s, opacity .12s; }
+.btn:hover { background: var(--accent-hover); }
+.btn.ghost { background: var(--raised); color: var(--text); border-color: var(--line-2); font-weight: 500; }
+.btn.ghost:hover { background: var(--field); }
+.btn.plain { background: none; color: var(--text-2); font-weight: 500; padding: 7px 10px; }
+.btn.plain:hover { background: rgba(0,0,0,.05); color: var(--text); }
+.btn.danger { background: none; color: var(--danger); border-color: var(--danger); font-weight: 500; }
+.btn.lg { padding: 9px 18px; font-size: 14px; }
+.btn.icon { padding: 7px 9px; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn.rec { background: var(--danger); }
+kbd { font: 11px -apple-system, sans-serif; background: rgba(255,255,255,.22); border-radius: 4px; padding: 1px 5px; }
+.btn.ghost kbd { background: var(--field); color: var(--muted); }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  background: var(--field); border: 1px solid var(--line); border-radius: var(--r-s); padding: 7px 10px; outline: none; width: 100%;
+  transition: border-color .12s, box-shadow .12s; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea { resize: vertical; line-height: 1.55; }
+.spin { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.4); border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; }
+.btn.ghost .spin { border-color: var(--line-2); border-top-color: var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- lecteur ---------- */
+.pane-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+.pane-head h2 { margin: 0; font-size: 16px; letter-spacing: -.01em; line-height: 1.3; }
+.pane-head .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.thread { padding: 16px 20px 24px; }
+.mail { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 10px; box-shadow: var(--shadow); overflow: hidden; }
+.mail.mine { background: var(--me); }
+.mail-head { display: flex; gap: 10px; align-items: center; padding: 10px 14px; cursor: pointer; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: #fff; flex: none; }
+.mail-head .who { flex: 1; min-width: 0; }
+.mail-head .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-head .who span { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.mail-head .when { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.mail-body { padding: 0 14px 14px 54px; white-space: pre-wrap; word-wrap: break-word; color: var(--text); font-size: 13px; }
+.mail.collapsed .mail-body { display: none; }
+.mail.collapsed .mail-head .who span.snippet { display: block; }
+.pasted { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; font-size: 13px; box-shadow: var(--shadow); }
+.note { background: var(--accent-soft); color: var(--text); border-radius: var(--r-s); padding: 8px 12px; font-size: 12.5px; margin-bottom: 12px; }
+.reader-inline { display: none; margin-bottom: 14px; }
+.reader-inline details { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; }
+.reader-inline summary { cursor: pointer; font-weight: 600; }
+.reader-inline pre { white-space: pre-wrap; font: 12.5px/1.5 -apple-system, sans-serif; max-height: 300px; overflow: auto; }
+
+/* ---------- rédaction ---------- */
+.compose-wrap { padding: 16px 20px 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); margin-bottom: 14px; }
+.card-title { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.step { width: 18px; height: 18px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
+.dictation textarea { border: none; background: none; box-shadow: none; padding: 10px 14px; min-height: 120px; font-size: 15px; resize: none; }
+.dictation textarea:focus { box-shadow: none; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.toolbar .hint { color: var(--muted); font-size: 12px; flex: 1; min-width: 120px; }
+.fields { padding: 4px 14px 0; }
+.field-row { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 3px 0; }
+.field-row > label:first-child { color: var(--muted); width: 52px; flex: none; font-size: 12.5px; }
+.field-row input[type=text] { flex: 1; min-width: 0; width: auto; border: none; background: none; padding: 6px 0; box-shadow: none; }
+.field-row input[type=text]:focus { box-shadow: none; }
+.toggle-all { font-size: 12px; color: var(--text-2); white-space: nowrap; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.draft textarea#corps { border: none; background: none; box-shadow: none; padding: 12px 14px; min-height: 280px; font-size: 14px; }
+.draft textarea#corps:focus { box-shadow: none; }
+.used { padding: 0 14px 10px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; color: var(--muted); font-size: 12px; }
+.pill { background: var(--accent-soft); color: var(--accent); border-radius: 99px; padding: 1px 9px; font-size: 11.5px; font-weight: 500; }
+.adjust { display: flex; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
+.actions { position: sticky; bottom: 0; display: flex; gap: 8px; align-items: center; padding: 12px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
+.actions .grow { flex: 1; }
+.check { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12.5px; cursor: pointer; }
+.skeleton { padding: 14px; }
+.skeleton i { display: block; height: 11px; border-radius: 6px; margin: 10px 0; background: linear-gradient(90deg, var(--field) 0%, var(--line-2) 50%, var(--field) 100%);
+  background-size: 200% 100%; animation: shimmer 1.2s infinite linear; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ---------- feuilles (profils, réglages) ---------- */
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.28); display: grid; place-items: center; z-index: 20; padding: 24px;
+  animation: fade .15s ease-out; }
+@keyframes fade { from { opacity: 0; } }
+.sheet { background: var(--bg); border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.35); width: min(1040px, 100%); max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); }
+.sheet-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.sheet-head h2 { margin: 0; font-size: 15px; flex: 1; }
+.sheet-body { display: grid; grid-template-columns: 230px 1fr; min-height: 0; flex: 1; }
+.sheet-body.single { grid-template-columns: 1fr; }
+.sheet-side { border-right: 1px solid var(--line); padding: 10px 8px; overflow-y: auto; background: var(--sidebar); }
+.sheet-main { padding: 18px 22px; overflow-y: auto; }
+.form-section { margin-bottom: 20px; }
+.form-section h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 8px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-grid.imap { grid-template-columns: 2fr 90px 2fr; }
+.f label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; font-weight: 500; }
+.help { font-size: 12px; color: var(--muted); }
+.f .help { margin-top: 4px; }
+.status-ok { color: var(--ok); } .status-ko { color: var(--danger); }
+.test-result { margin-top: 10px; font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+.sheet-foot { display: flex; gap: 8px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--panel); }
+.sheet-foot .grow { flex: 1; }
+
+@media (max-width: 1180px) { .app { grid-template-columns: 270px 1fr; } .reader { display: none !important; } .reader-inline { display: block !important; } }
+
+/* ---------- icônes ---------- */
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -3px; }
+.ic.lg { width: 20px; height: 20px; } .ic.xl { width: 34px; height: 34px; stroke-width: 1.3; }
+.logo .ic { stroke: #fff; width: 18px; height: 18px; }
+.empty .big { display: block; margin-bottom: 8px; opacity: .45; }
+.empty .big .ic { display: inline-block; vertical-align: top; }
+.empty.small { padding: 14px 10px; }
+.ic.sm { width: 13px; height: 13px; }
+.filters { display: flex; gap: 3px; padding: 0 10px 8px; align-items: center; }
+.filters button { border: 1px solid var(--line); background: var(--raised); color: var(--text-2); border-radius: 99px; padding: 3px 8px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.filters button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.filters i { font-style: normal; opacity: .8; }
+.filters select { width: auto; margin-left: auto; padding: 3px 6px; font-size: 12px; border-radius: 99px; max-width: 78px; min-width: 0; }
+.msg-item .from { display: flex; align-items: center; gap: 6px; }
+.msg-item .from b { font: inherit; overflow: hidden; text-overflow: ellipsis; }
+.msg-item.unread .from, .msg-item.unread .meta { font-weight: 700; }
+.msg-item.unread .meta { color: var(--text); } .msg-item.on.unread .meta { color: var(--on-accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; } .msg-item.on .dot { background: #fff; }
+.star { color: #e8a200; fill: #e8a200; width: 13px; height: 13px; flex: none; } .msg-item.on .star { color: #ffd45a; fill: #ffd45a; }
+.pane-row { display: flex; gap: 12px; align-items: flex-start; } .pane-row > div:first-child { flex: 1; }
+.flag-btns { display: flex; gap: 6px; flex: none; }
+.flag-btns .btn { padding: 5px 10px; font-size: 12.5px; }
+.flag-btns .btn.set { color: #b57900; border-color: #e8a200; } .flag-btns .btn.set svg { fill: #e8a200; }
+/* ---------- formulaires des feuilles ---------- */
+.sheet { height: min(820px, calc(100vh - 48px)); }
+.sheet-body { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.sheet-side .btn.plain { justify-content: flex-start; }
+.adv { margin-top: 10px; } .adv summary { cursor: pointer; color: var(--text-2); font-weight: 500; font-size: 12.5px; padding: 4px 0; }
+.seg-grid { display: grid; grid-template-columns: 1.5fr 1.2fr 1.1fr; gap: 10px 14px; }
+@media (max-width: 900px) { .seg-grid { grid-template-columns: 1fr; } }
+.segc { display: flex; background: rgba(0,0,0,.06); border-radius: 9px; padding: 2px; }
+@media (prefers-color-scheme: dark) { .segc { background: rgba(255,255,255,.07); } }
+.segc button { flex: 1; border: none; background: none; padding: 6px 6px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 12.5px; white-space: nowrap; }
+.segc button.on { background: var(--raised); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.sources { display: flex; flex-direction: column; gap: 6px; }
+.src-row { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; }
+.src-row.off { opacity: .55; }
+.src-row .ic.lg { color: var(--accent); }
+.src-txt { flex: 1; min-width: 0; line-height: 1.3; }
+.src-txt b { display: block; font-weight: 600; }
+.src-txt span { display: block; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-n { color: var(--text-2); font-size: 12px; white-space: nowrap; } .src-n.bad { color: var(--danger); }
+.row-btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.tog { position: relative; width: 32px; height: 19px; flex: none; cursor: pointer; }
+.tog input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.tog span { position: absolute; inset: 0; background: var(--line-2); border-radius: 99px; transition: background .15s; }
+.tog span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.tog input:checked + span { background: var(--ok); } .tog input:checked + span::after { transform: translateX(13px); }
+#toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); max-width: min(560px, 90vw); padding: 10px 16px; border-radius: 10px;
+  background: #1d1d1f; color: #fff; white-space: pre-wrap; z-index: 50; box-shadow: 0 10px 30px rgba(0,0,0,.3); font-size: 13px; animation: fade .15s; }
+#toast.err { background: var(--danger); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7.5 8 6 8-6"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 14a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.4l2 2.2h7.6A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6.5 3h7.2L19 8.3V19.5A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M13.5 3v5.5H19M8.5 13h7M8.5 16.5h5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6.5A2.5 2.5 0 0 0 13 4H6.5A2.5 2.5 0 0 0 4 6.5V13A2.5 2.5 0 0 0 6.5 15.5h2"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l.8 12.2A1.5 1.5 0 0 0 8.8 20.5h6.4a1.5 1.5 0 0 0 1.5-1.3L17.5 7M10 11v5.5M14 11v5.5"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3.5 13.5 6 6.2A2 2 0 0 1 7.9 5h8.2A2 2 0 0 1 18 6.2l2.5 7.3v4A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5z"/><path d="M3.5 13.5H8a1 1 0 0 1 1 1 3 3 0 0 0 6 0 1 1 0 0 1 1-1h4.5"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4A8 8 0 1 1 20 12z"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M21 4 10.5 14.5M21 4l-6.5 17-4-6.5L4 10.5z"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 17l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+</defs></svg>
+<div class="app">
+  <!-- ===== barre latérale ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo"><svg class="ic lg"><use href="#i-mail"/></svg></div>
+      <div><b>Assistant Email</b><small id="ia-etat">…</small></div>
+    </div>
+    <div class="profile-select"><select id="profil" title="Profil (boîte mail)"></select></div>
+    <div class="seg">
+      <button data-src="imap" class="on">Boîte</button>
+      <button data-src="mail">Apple Mail</button>
+      <button data-src="coller">Coller</button>
+    </div>
+    <div id="src-imap" class="scroll" style="display:flex;flex-direction:column">
+      <div class="src-tools">
+        <select id="dossier"><option value="INBOX">Boîte de réception</option></select>
+        <button class="btn ghost icon" id="b-rafraichir" title="Actualiser"><svg class="ic"><use href="#i-refresh"/></svg></button>
+      </div>
+      <div class="filters" id="filtres">
+        <button data-f="tous" class="on">Tous</button>
+        <button data-f="non_lus">Non lus <i id="n-nl"></i></button>
+        <button data-f="suivis"><svg class="ic sm"><use href="#i-star"/></svg> <i id="n-su"></i></button>
+        <select id="tri" title="Trier"><option value="date">Date</option><option value="non_lus">Non lus d'abord</option><option value="suivis">Suivis d'abord</option></select>
+      </div>
+      <div class="msg-list scroll" id="liste"><div class="empty"><span class="big"><svg class="ic xl"><use href="#i-inbox"/></svg></span>Choisissez un profil puis actualisez.</div></div>
+    </div>
+    <div id="src-mail" class="side-pane hidden">
+      <p>Sélectionnez un message dans Apple Mail, puis cliquez ci-dessous. Le profil est choisi d'après l'adresse du destinataire et les messages précédents du fil sont récupérés.</p>
+      <button class="btn" id="b-mail" style="width:100%">Lire le message sélectionné</button>
+    </div>
+    <div id="src-coller" class="side-pane hidden" style="display:flex;flex-direction:column;flex:1">
+      <p>Postbox, Thunderbird ou autre : copiez la conversation (⌘A puis ⌘C dans le message) et collez-la ici.</p>
+      <textarea id="colle" style="flex:1;min-height:180px;font-size:12.5px" placeholder="Collez la conversation ici…"></textarea>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn ghost" id="b-presse" style="flex:1">Coller</button>
+        <button class="btn" id="b-utiliser" style="flex:1">Utiliser</button>
+      </div>
+    </div>
+    <div class="side-foot">
+      <button class="btn plain" id="b-ouvrir-profils"><svg class="ic"><use href="#i-user"/></svg> Profils</button>
+      <button class="btn plain" id="b-ouvrir-reglages"><svg class="ic"><use href="#i-gear"/></svg> Réglages</button>
+    </div>
+  </aside>
+
+  <!-- ===== conversation ===== -->
+  <section class="reader">
+    <div class="pane-head"><div class="pane-row"><div style="min-width:0"><h2 id="conv-titre">Aucune conversation</h2><div class="sub" id="conv-sous">Choisissez un message à gauche.</div></div>
+      <div class="flag-btns hidden" id="flag-btns">
+        <button class="btn ghost" id="b-lu" title="Marquer comme lu ou non lu"><svg class="ic"><use href="#i-eye"/></svg> <span>Marquer lu</span></button>
+        <button class="btn ghost" id="b-suivi" title="Suivre (étoile)"><svg class="ic"><use href="#i-star"/></svg> <span>Suivre</span></button>
+      </div></div></div>
+    <div class="scroll thread" id="thread">
+      <div class="empty"><span class="big"><svg class="ic xl"><use href="#i-chat"/></svg></span>La conversation s'affichera ici, avec les messages précédents du fil.</div>
+    </div>
+  </section>
+
+  <!-- ===== rédaction ===== -->
+  <section class="composer">
+    <div class="scroll">
+      <div class="compose-wrap">
+        <div class="reader-inline"><details><summary id="inline-titre">Conversation</summary><pre id="inline-texte"></pre></details></div>
+
+        <div class="card dictation">
+          <div class="card-title"><span class="step">1</span> Ce que vous voulez répondre</div>
+          <textarea id="dictee" placeholder="Dictez ou tapez votre réponse en vrac, l'IA s'occupe de la forme."></textarea>
+          <div class="toolbar">
+            <button class="btn ghost" id="b-dicter" title="Démarrer la dictée macOS"><svg class="ic"><use href="#i-mic"/></svg> Dicter</button>
+            <span class="hint" id="gen-etat">Dictée macOS : bouton ci-contre ou touche Fn deux fois.</span>
+            <button class="btn" id="b-generer">Rédiger <kbd>⌘↩</kbd></button>
+          </div>
+        </div>
+
+        <div class="card draft">
+          <div class="card-title"><span class="step">2</span> Brouillon</div>
+          <div class="fields">
+            <div class="field-row"><label for="a">À</label><input type="text" id="a"></div>
+            <div class="field-row"><label for="cc">Cc</label><input type="text" id="cc">
+              <label class="toggle-all"><input type="checkbox" id="tous"> Répondre à tous</label></div>
+            <div class="field-row"><label for="objet">Objet</label><input type="text" id="objet"></div>
+          </div>
+          <div id="squelette" class="skeleton hidden"><i style="width:30%"></i><i style="width:92%"></i><i style="width:85%"></i><i style="width:60%"></i><i style="width:25%"></i></div>
+          <textarea id="corps" placeholder="Le brouillon rédigé apparaîtra ici. Vous pourrez le modifier librement."></textarea>
+          <div class="used hidden" id="modeles-utilises"></div>
+          <div class="adjust">
+            <input type="text" id="ajustement" placeholder="Ajuster : plus court, plus chaleureux, ajoute que je suis absent lundi…">
+            <button class="btn ghost" id="b-ajuster">Ajuster</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <label class="check"><input type="checkbox" id="citer" checked> Citer le message d'origine</label>
+      <span class="grow"></span>
+      <button class="btn ghost" id="b-copier">Copier le texte</button>
+      <button class="btn lg" id="b-deposer">Déposer dans Brouillons</button>
+    </div>
+  </section>
+</div>
+
+<!-- ===== feuille Profils ===== -->
+<div class="sheet-bg hidden" id="v-profils">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Profils</h2><button class="btn plain" data-close>Fermer</button></div>
+    <div class="sheet-body">
+      <div class="sheet-side">
+        <div id="liste-profils"></div>
+        <button class="btn ghost" id="b-nouveau" style="width:100%;margin-top:8px"><svg class="ic"><use href="#i-plus"/></svg> Nouveau profil</button>
+        <button class="btn plain" id="b-dupliquer" style="width:100%;margin-top:4px"><svg class="ic"><use href="#i-copy"/></svg> Dupliquer</button>
+      </div>
+      <div class="sheet-main">
+        <input type="hidden" id="pf-id">
+
+        <div class="form-section">
+          <h3>1 · Qui écrit</h3>
+          <div class="form-grid">
+            <div class="f"><label>Nom du profil</label><input type="text" id="pf-nom" placeholder="Pro, Association…"></div>
+            <div class="f"><label>Votre nom (expéditeur)</label><input type="text" id="pf-nom_affiche" placeholder="Prénom Nom"></div>
+            <div class="f full"><label>Adresse email</label><input type="text" id="pf-email" placeholder="vous@domaine.ch" autocapitalize="off" spellcheck="false"></div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>2 · Boîte mail</h3>
+          <div class="form-grid">
+            <div class="f"><label>Hébergeur</label>
+              <select id="pf-hebergeur">
+                <option value="infomaniak">Infomaniak</option><option value="gmail">Gmail</option>
+                <option value="icloud">iCloud</option><option value="outlook">Outlook / Microsoft 365</option>
+                <option value="autre">Autre…</option></select></div>
+            <div class="f"><label>Mot de passe <span id="pf-mdp-etat"></span></label>
+              <input type="password" id="pf-mot_de_passe" placeholder="Vide = garder celui du Trousseau" autocomplete="new-password"></div>
+            <div class="f full help" id="pf-mdp-aide" style="margin-top:-4px"></div>
+          </div>
+          <details class="adv">
+            <summary>Options avancées de connexion</summary>
+            <div class="form-grid imap" style="margin-top:10px">
+              <div class="f"><label>Serveur IMAP</label><input type="text" id="pf-imap_hote"></div>
+              <div class="f"><label>Port</label><input type="number" id="pf-imap_port"></div>
+              <div class="f"><label>Identifiant (si différent)</label><input type="text" id="pf-imap_utilisateur" placeholder="= adresse email"></div>
+            </div>
+            <div class="f" style="margin-top:10px"><label>Dossier Brouillons</label><input type="text" id="pf-dossier_brouillons" placeholder="Détection automatique">
+              <div class="help">À remplir seulement si les brouillons ne tombent pas au bon endroit.</div></div>
+          </details>
+          <div style="margin-top:10px"><button class="btn ghost" id="b-tester"><svg class="ic"><use href="#i-check"/></svg> Tester la connexion</button></div>
+          <div id="pf-test" class="test-result hidden"></div>
+        </div>
+
+        <div class="form-section">
+          <h3>3 · Façon d'écrire</h3>
+          <div class="seg-grid">
+            <div class="f"><label>Adresse</label>
+              <div class="segc" id="pf-adresse"><button data-v="auto">Selon la conversation</button><button data-v="vous">Vous</button><button data-v="tu">Tu</button></div></div>
+            <div class="f"><label>Ton</label>
+              <div class="segc" id="pf-registre"><button data-v="sobre">Sobre</button><button data-v="cordial">Cordial</button><button data-v="chaleureux">Chaleureux</button></div></div>
+            <div class="f"><label>Longueur</label>
+              <div class="segc" id="pf-longueur"><button data-v="concis">Concis</button><button data-v="normal">Normal</button><button data-v="detaille">Détaillé</button></div></div>
+          </div>
+          <div class="form-grid" style="margin-top:12px">
+            <div class="f full"><label>Précisions de style (facultatif)</label>
+              <textarea id="pf-ton" rows="3" placeholder="Ex. : phrases courtes, pas de formules pompeuses. Je termine par « Meilleures salutations »."></textarea></div>
+            <div class="f full"><label>Consignes permanentes (facultatif)</label>
+              <textarea id="pf-consignes" rows="2" placeholder="Ex. : proposer un appel si la question est complexe. Je suis disponible du lundi au jeudi."></textarea></div>
+            <div class="f"><label>Signature</label><textarea id="pf-signature" rows="4" placeholder="Ajoutée automatiquement sous chaque brouillon."></textarea></div>
+            <div class="f"><label>Apprendre de mes envoyés</label>
+              <select id="pf-envoyes_nb"><option value="0">Non</option><option value="5">5 derniers emails</option>
+                <option value="8">8 derniers emails</option><option value="15">15 derniers emails</option><option value="30">30 derniers emails</option></select>
+              <div class="help">L'IA lit vos derniers emails envoyés de cette boîte pour imiter votre style réel.</div>
+              <label class="check" style="margin-top:12px"><input type="checkbox" id="pf-citer_original" checked> Citer le message d'origine</label></div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>4 · Modèles et documents</h3>
+          <div class="help" style="margin:-2px 0 8px">Dossiers ou fichiers TXT / Markdown. L'IA choisit elle-même ceux qui sont utiles et s'en inspire.</div>
+          <div id="pf-sources" class="sources"></div>
+          <div class="row-btns">
+            <button class="btn ghost" data-add="dossier" data-target="pf"><svg class="ic"><use href="#i-folder"/></svg> Ajouter un dossier</button>
+            <button class="btn ghost" data-add="fichier" data-target="pf"><svg class="ic"><use href="#i-file"/></svg> Ajouter un fichier</button>
+          </div>
+          <div id="pf-partagees" class="help" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn danger hidden" id="b-supprimer"><svg class="ic"><use href="#i-trash"/></svg> Supprimer</button>
+      <span class="grow"></span>
+      <button class="btn" id="b-enregistrer">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== feuille Réglages ===== -->
+<div class="sheet-bg hidden" id="v-reglages">
+  <div class="sheet" style="width:min(680px,100%)">
+    <div class="sheet-head"><h2>Réglages</h2><button class="btn plain" data-close>Fermer</button></div>
+    <div class="sheet-body single"><div class="sheet-main">
+      <div class="form-section">
+        <h3>Modèles partagés par tous les profils</h3>
+        <div class="help" style="margin:-2px 0 8px">Utile pour des documents communs : conditions générales, présentation, FAQ…</div>
+        <div id="rg-sources" class="sources"></div>
+        <div class="row-btns">
+          <button class="btn ghost" data-add="dossier" data-target="rg"><svg class="ic"><use href="#i-folder"/></svg> Ajouter un dossier</button>
+          <button class="btn ghost" data-add="fichier" data-target="rg"><svg class="ic"><use href="#i-file"/></svg> Ajouter un fichier</button>
+        </div>
+      </div>
+      <div class="form-section">
+        <h3>Sauvegarde des profils et réglages</h3>
+        <div class="help" style="margin:-2px 0 8px">Une copie datée est faite automatiquement à chaque modification (les 20 dernières sont gardées). Les mots de passe restent dans le Trousseau macOS et ne sont pas exportés.</div>
+        <div class="row-btns" style="margin-top:0">
+          <button class="btn ghost" id="b-exporter"><svg class="ic"><use href="#i-file"/></svg> Exporter</button>
+          <button class="btn ghost" id="b-importer"><svg class="ic"><use href="#i-folder"/></svg> Importer…</button>
+          <button class="btn ghost" id="b-sauvegardes"><svg class="ic"><use href="#i-folder"/></svg> Ouvrir les sauvegardes</button>
+        </div>
+      </div>
+      <div class="form-section">
+        <h3>Mises à jour <span id="rg-version" class="help" style="text-transform:none;letter-spacing:0"></span></h3>
+        <div class="form-grid">
+          <div class="f"><label>Dépôt GitHub</label><input type="text" id="rg-depot_github" placeholder="propriétaire/dépôt" autocapitalize="off" spellcheck="false"></div>
+          <div class="f"><label>Jeton d'accès (dépôt privé) <span id="rg-jeton-etat"></span></label><input type="password" id="rg-jeton_github" placeholder="Vide = garder celui du Trousseau" autocomplete="new-password"></div>
+        </div>
+        <div class="row-btns"><button class="btn ghost" id="b-maj"><svg class="ic"><use href="#i-refresh"/></svg> Rechercher une mise à jour</button></div>
+        <div id="rg-maj" class="test-result hidden"></div>
+      </div>
+      <div class="form-section">
+        <h3>Intelligence artificielle</h3>
+        <div id="rg-detecte" class="test-result" style="margin:0 0 4px"></div>
+        <details class="adv">
+          <summary>Options avancées</summary>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="f full"><label>Commande (vide = détection automatique de agy)</label>
+              <input type="text" id="rg-gemini_chemin" placeholder="~/.local/bin/agy">
+              <div class="help">Dans un terminal, « which agy » donne le chemin.</div></div>
+            <div class="f"><label>Modèle</label><input type="text" id="rg-gemini_modele" placeholder="Par défaut">
+              <div class="help">Liste : « agy models » dans un terminal.</div></div>
+            <div class="f"><label>Délai maximum (secondes)</label><input type="number" id="rg-gemini_delai"></div>
+            <div class="f"><label>Messages affichés dans la liste</label><input type="number" id="rg-nb_messages"></div>
+            <div class="f"><label>Port local</label><input type="number" id="rg-port"></div>
+          </div>
+        </details>
+      </div>
+    </div></div>
+    <div class="sheet-foot"><span class="grow"></span><button class="btn" id="b-reglages">Enregistrer</button></div>
+  </div>
+</div>
+<div id="toast" class="hidden"></div>
+
+<script>
+const JETON = "__JETON__";
+const $ = (id) => document.getElementById(id);
+let ETAT = { profils: [], reglages: {} };
+let CTX = { texte: "", reponse: null };
+let SOURCE = "imap";
+
+async function api(path, body) {
+  const opt = { method: body === undefined ? "GET" : "POST", headers: { "X-Jeton": JETON } };
+  if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(path, opt);
+  let data; try { data = await r.json(); } catch (e) { data = { erreur: "Réponse illisible du serveur." }; }
+  if (r.status === 403) throw new Error("Session expirée : rouvrez l'assistant depuis la barre de menus.");
+  if (!r.ok) throw new Error(data.erreur || ("Erreur " + r.status));
+  return data;
+}
+let toastTimer;
+function toast(msg, err) {
+  const t = $("toast"); t.textContent = msg; t.className = err ? "err" : ""; clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = "hidden", err ? 9000 : 3500);
+}
+async function busy(btn, fn) {
+  const html = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>' + (btn.classList.contains("icon") ? "" : " " + btn.textContent.replace(/⌘↩/, "").trim());
+  try { return await fn(); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; btn.innerHTML = html; }
+}
+function esc(s) { return (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function nameOf(s) { const m = (s || "").match(/^\s*"?([^"<]+?)"?\s*</); return (m ? m[1] : (s || "").replace(/[<>]/g, "")).trim(); }
+function addrOf(s) { const m = (s || "").match(/<([^>]+)>/); return (m ? m[1] : s || "").trim().toLowerCase(); }
+function initials(s) { const n = nameOf(s).replace(/@.*/, ""); const p = n.split(/[\s._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : "")).toUpperCase(); }
+function color(s) { let h = 0; for (const c of addrOf(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 52%)`; }
+function shortDate(d, ts) {
+  if (!ts) return (d || "").replace(/:\d\d [+-]\d{4}.*$/, "");
+  const x = new Date(ts * 1000), now = new Date();
+  if (x.toDateString() === now.toDateString()) return x.toLocaleTimeString("fr-CH", { hour: "2-digit", minute: "2-digit" });
+  return x.toLocaleDateString("fr-CH", { day: "numeric", month: "short", year: x.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}
+const profilId = () => $("profil").value;
+const profil = () => ETAT.profils.find(p => p.id === profilId());
+function localGet(k) { try { return localStorage.getItem("ae-" + k); } catch (e) { return null; } }
+function localSet(k, v) { try { localStorage.setItem("ae-" + k, v); } catch (e) {} }
+
+// ---------- feuilles ----------
+function sheet(name, open) { $("v-" + name).classList.toggle("hidden", !open); }
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.closest(".sheet-bg").classList.add("hidden"));
+document.querySelectorAll(".sheet-bg").forEach(bg => bg.onclick = (e) => { if (e.target === bg) bg.classList.add("hidden"); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".sheet-bg").forEach(s => s.classList.add("hidden")); });
+$("b-ouvrir-profils").onclick = () => { sheet("profils", true); const p = profil(); p ? editerProfil(p) : nouveauProfil(); };
+$("b-ouvrir-reglages").onclick = () => sheet("reglages", true);
+
+function source(name) {
+  SOURCE = name;
+  document.querySelectorAll(".seg button").forEach(b => b.classList.toggle("on", b.dataset.src === name));
+  ["imap", "mail", "coller"].forEach(s => $("src-" + s).classList.toggle("hidden", s !== name));
+}
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => source(b.dataset.src));
+
+// ---------- état ----------
+async function charger() {
+  ETAT = await api("/api/etat");
+  const sel = $("profil"), keep = sel.value || localGet("profil");
+  sel.innerHTML = ETAT.profils.length ? "" : '<option value="">Aucun profil</option>';
+  ETAT.profils.forEach(p => sel.insertAdjacentHTML("beforeend", `<option value="${esc(p.id)}">${esc(p.nom)} — ${esc(p.email)}</option>`));
+  if (keep && ETAT.profils.some(p => p.id === keep)) sel.value = keep;
+  majCitation(); rendreProfils(); rendreReglages(); chargerFiltre();
+  const ia = ETAT.gemini_trouve;
+  $("ia-etat").innerHTML = ia ? '<span class="status-ok">●</span> ' + esc(ia.split("/").pop()) + " prêt" : '<span class="status-ko">●</span> IA introuvable';
+  if (!ETAT.profils.length) { sheet("profils", true); nouveauProfil(); }
+}
+function majCitation() { const p = profil(); $("citer").checked = !p || p.citer_original !== false; }
+$("profil").onchange = () => { majCitation(); localSet("profil", profilId()); chargerFiltre(); if (SOURCE === "imap") rafraichir(); };
+
+// ---------- source : IMAP ----------
+let FILTRE = "tous", LISTE = [], COMPTES = { non_lus: 0, suivis: 0 };
+function chargerFiltre() {
+  FILTRE = localGet("filtre-" + profilId()) || "tous"; $("tri").value = localGet("tri") || "date";
+  document.querySelectorAll("#filtres button").forEach(b => b.classList.toggle("on", b.dataset.f === FILTRE));
+}
+document.querySelectorAll("#filtres button").forEach(b => b.onclick = () => {
+  FILTRE = b.dataset.f; localSet("filtre-" + profilId(), FILTRE);
+  document.querySelectorAll("#filtres button").forEach(x => x.classList.toggle("on", x === b)); rafraichir();
+});
+$("tri").onchange = () => { localSet("tri", $("tri").value); rendreListe(); };
+function rendreComptes() { $("n-nl").textContent = COMPTES.non_lus || ""; $("n-su").textContent = COMPTES.suivis || ""; }
+function rendreListe() {
+  const box = $("liste"), tri = $("tri").value;
+  const list = LISTE.slice().sort((x, y) => (tri === "non_lus" ? (x.lu - y.lu) : tri === "suivis" ? (y.suivi - x.suivi) : 0) || (y.horodatage - x.horodatage));
+  const vide = FILTRE === "non_lus" ? "Aucun message non lu." : FILTRE === "suivis" ? "Aucun message suivi." : "Aucun message.";
+  box.innerHTML = list.length ? "" : '<div class="empty"><span class="big"><svg class="ic xl"><use href="#i-inbox"/></svg></span>' + vide + "</div>";
+  list.forEach(m => {
+    const d = document.createElement("div"); d.className = "msg-item" + (m.lu ? "" : " unread") + (CTX.meta && CTX.meta.msg === m ? " on" : "");
+    d.innerHTML = `<div class="top"><span class="from">${m.lu ? "" : '<span class="dot"></span>'}<b>${esc(nameOf(m.de) || m.de)}</b></span>${m.suivi ? '<svg class="ic star"><use href="#i-star"/></svg>' : ""}<span class="date">${esc(shortDate(m.date, m.horodatage))}</span></div><div class="meta">${esc(m.objet || "(sans objet)")}</div>`;
+    d.onclick = async () => {
+      box.querySelectorAll(".msg-item").forEach(x => x.classList.remove("on")); d.classList.add("on");
+      $("thread").innerHTML = '<div class="skeleton"><i style="width:40%"></i><i></i><i style="width:80%"></i></div>';
+      try { montrerConversation(await api("/api/conversation", { profil: profilId(), uid: m.uid, dossier: $("dossier").value }), { uid: m.uid, dossier: $("dossier").value, msg: m }); }
+      catch (e) { toast(e.message, true); $("thread").innerHTML = ""; }
+    };
+    box.appendChild(d);
+  });
+}
+async function rafraichir() {
+  if (!profilId()) return toast("Créez d'abord un profil.", true);
+  await busy($("b-rafraichir"), async () => {
+    const r = await api("/api/messages?profil=" + encodeURIComponent(profilId()) + "&dossier=" + encodeURIComponent($("dossier").value) + "&filtre=" + FILTRE);
+    LISTE = r.messages; COMPTES = { non_lus: r.non_lus, suivis: r.suivis }; rendreComptes(); rendreListe();
+  });
+}
+function majBoutonsDrapeaux() {
+  const m = CTX.meta && CTX.meta.msg; $("flag-btns").classList.toggle("hidden", !m); if (!m) return;
+  $("b-lu").querySelector("span").textContent = m.lu ? "Marquer non lu" : "Marquer lu";
+  $("b-suivi").querySelector("span").textContent = m.suivi ? "Ne plus suivre" : "Suivre"; $("b-suivi").classList.toggle("set", m.suivi);
+}
+async function basculer(drapeau) {
+  const m = CTX.meta.msg, cle = drapeau === "lu" ? "lu" : "suivi", valeur = !m[cle];
+  await api("/api/drapeau", { profil: profilId(), dossier: CTX.meta.dossier, uid: CTX.meta.uid, drapeau, valeur });
+  m[cle] = valeur;
+  if (cle === "lu") COMPTES.non_lus = Math.max(0, COMPTES.non_lus + (valeur ? -1 : 1)); else COMPTES.suivis = Math.max(0, COMPTES.suivis + (valeur ? 1 : -1));
+  rendreComptes(); rendreListe(); majBoutonsDrapeaux();
+}
+$("b-lu").onclick = async () => { await busy($("b-lu"), () => basculer("lu")); majBoutonsDrapeaux(); };
+$("b-suivi").onclick = async () => { await busy($("b-suivi"), () => basculer("suivi")); majBoutonsDrapeaux(); };
+$("b-rafraichir").onclick = rafraichir;
+
+// ---------- source : Apple Mail ----------
+async function lireMail() {
+  source("mail");
+  await busy($("b-mail"), async () => {
+    const data = await api("/api/mail-selection", {});
+    if (data.profil) { $("profil").value = data.profil; localSet("profil", data.profil); majCitation(); }
+    else toast("Aucun profil ne correspond à ce message : vérifiez le profil choisi.", true);
+    montrerConversation(data);
+  });
+}
+$("b-mail").onclick = lireMail;
+
+// ---------- source : coller ----------
+async function collerPressePapiers() {
+  source("coller");
+  try { const d = await api("/api/presse-papiers"); if (d.texte) $("colle").value = d.texte; }
+  catch (e) { try { $("colle").value = await navigator.clipboard.readText(); } catch (e2) { toast("Collez avec ⌘V.", true); } }
+}
+$("b-presse").onclick = collerPressePapiers;
+$("b-utiliser").onclick = () => {
+  const t = $("colle").value.trim(); if (!t) return toast("Rien à utiliser.", true);
+  montrerConversation({ texte: t, reponse: null, note: "Texte collé : complétez le destinataire et l'objet du brouillon." });
+};
+
+// ---------- affichage de la conversation ----------
+function montrerConversation(data, meta) {
+  CTX = { texte: data.texte || "", reponse: data.reponse || null, meta: meta || null };
+  majBoutonsDrapeaux();
+  const msgs = data.messages || [];
+  const own = ETAT.profils.map(p => (p.email || "").toLowerCase());
+  const th = $("thread"); th.innerHTML = "";
+  if (data.note) th.insertAdjacentHTML("beforeend", `<div class="note">${esc(data.note)}</div>`);
+  if (msgs.length) {
+    msgs.forEach((m, i) => {
+      const mine = own.includes(addrOf(m.de));
+      const el = document.createElement("div");
+      el.className = "mail" + (mine ? " mine" : "") + (i < msgs.length - 1 ? " collapsed" : "");
+      const snippet = (m.corps || "").replace(/\s+/g, " ").slice(0, 120);
+      el.innerHTML = `<div class="mail-head"><div class="avatar" style="background:${color(m.de)}">${esc(initials(m.de))}</div>
+        <div class="who"><b>${esc(nameOf(m.de) || m.de)}${mine ? " (moi)" : ""}</b><span>${i < msgs.length - 1 ? esc(snippet) : "À : " + esc(m.a)}</span></div>
+        <div class="when">${esc(shortDate(m.date, m.horodatage))}</div></div><div class="mail-body">${esc(m.corps)}</div>`;
+      el.querySelector(".mail-head").onclick = () => {
+        el.classList.toggle("collapsed");
+        el.querySelector(".who span").textContent = el.classList.contains("collapsed") ? snippet : "À : " + (m.a || "");
+      };
+      th.appendChild(el);
+    });
+    const last = msgs[msgs.length - 1];
+    $("conv-titre").textContent = last.objet || "(sans objet)";
+    $("conv-sous").textContent = msgs.length > 1 ? msgs.length + " messages dans le fil" : "1 message";
+    setTimeout(() => th.lastElementChild && th.lastElementChild.scrollIntoView({ block: "start" }), 30);
+  } else {
+    th.insertAdjacentHTML("beforeend", `<div class="pasted">${esc(CTX.texte)}</div>`);
+    $("conv-titre").textContent = "Texte collé"; $("conv-sous").textContent = CTX.texte.length + " caractères";
+  }
+  $("inline-titre").textContent = "Conversation : " + $("conv-titre").textContent; $("inline-texte").textContent = CTX.texte;
+  const r = CTX.reponse;
+  $("a").value = r ? r.a : ""; $("objet").value = r ? r.objet : ""; $("tous").checked = false; $("cc").value = "";
+  $("corps").value = ""; $("modeles-utilises").classList.add("hidden");
+  $("dictee").focus();
+}
+$("tous").onchange = () => { $("cc").value = $("tous").checked && CTX.reponse ? CTX.reponse.cc_tous : ""; };
+
+// ---------- dictée macOS ----------
+$("b-dicter").onclick = async () => {
+  $("dictee").focus();
+  const native = window.pywebview && window.pywebview.api && window.pywebview.api.dicter;
+  let ok = false;
+  if (native) { try { ok = await window.pywebview.api.dicter(); } catch (e) {} }
+  $("gen-etat").textContent = ok ? "Parlez… Cliquez sur ✓ dans la bulle de dictée, ou appuyez sur Fn, pour terminer."
+                                 : "Appuyez deux fois sur Fn pour dicter (Réglages Système › Clavier › Dictée).";
+};
+
+// ---------- génération ----------
+async function generer(ajuster) {
+  if (!profilId()) return toast("Choisissez un profil.", true);
+  const btn = ajuster ? $("b-ajuster") : $("b-generer");
+  const body = { profil: profilId(), conversation: CTX.texte, dictee: $("dictee").value, objet: $("objet").value };
+  if (ajuster) {
+    if (!$("corps").value.trim()) return toast("Il n'y a pas encore de brouillon à ajuster.", true);
+    body.brouillon_precedent = $("corps").value; body.ajustement = $("ajustement").value;
+  }
+  $("gen-etat").textContent = "L'IA rédige… cela peut prendre une minute.";
+  $("squelette").classList.remove("hidden"); $("corps").classList.add("hidden");
+  const t0 = Date.now();
+  await busy(btn, async () => {
+    const r = await api("/api/generer", body);
+    if (r.objet && !$("objet").value) $("objet").value = r.objet;
+    $("corps").value = r.corps;
+    const u = $("modeles-utilises"), parts = [];
+    if (r.modeles_utilises.length) parts.push("Inspiré de " + r.modeles_utilises.map(m => `<span class="pill">${esc(m)}</span>`).join(""));
+    else if (r.nb_modeles) parts.push("Aucun des " + r.nb_modeles + " modèles n'a été jugé utile.");
+    if (r.nb_envoyes) parts.push("Style appris de " + r.nb_envoyes + " emails envoyés.");
+    u.innerHTML = parts.join(" · "); u.classList.toggle("hidden", !parts.length);
+    if (r.note) toast(r.note, true);
+    if (ajuster) $("ajustement").value = "";
+    $("gen-etat").textContent = "Rédigé en " + Math.round((Date.now() - t0) / 1000) + " s. Relisez et corrigez si besoin.";
+  });
+  $("squelette").classList.add("hidden"); $("corps").classList.remove("hidden");
+  if ($("gen-etat").textContent.startsWith("L'IA")) $("gen-etat").textContent = "";
+  autosize();
+}
+function autosize() { const c = $("corps"); c.style.height = "auto"; c.style.height = Math.max(280, c.scrollHeight + 4) + "px"; }
+$("corps").addEventListener("input", autosize);
+$("b-generer").onclick = () => generer(false);
+$("b-ajuster").onclick = () => generer(true);
+$("ajustement").onkeydown = (e) => { if (e.key === "Enter") generer(true); };
+document.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && document.activeElement === $("dictee")) generer(false); });
+
+function citation() { return $("citer").checked && CTX.reponse ? CTX.reponse.citation : null; }
+$("b-deposer").onclick = () => busy($("b-deposer"), async () => {
+  if (!$("corps").value.trim()) throw new Error("Le brouillon est vide.");
+  const r = CTX.reponse || {};
+  const d = await api("/api/deposer", { profil: profilId(), a: $("a").value, cc: $("cc").value, objet: $("objet").value,
+    corps: $("corps").value, in_reply_to: r.in_reply_to || "", references: r.references || "", citation: citation() });
+  toast("✓ Brouillon déposé dans « " + d.dossier + " ». Ouvrez-le dans votre client mail pour relire et envoyer.");
+});
+$("b-copier").onclick = () => busy($("b-copier"), async () => {
+  if (!$("corps").value.trim()) throw new Error("Le brouillon est vide.");
+  const d = await api("/api/texte-final", { profil: profilId(), corps: $("corps").value, citation: null });
+  try { await api("/api/copier", { texte: d.texte }); } catch (e) { await navigator.clipboard.writeText(d.texte); }
+  toast("✓ Texte copié : collez-le dans la réponse de votre client mail (⌘V).");
+});
+
+// ---------- sources de modèles (profil et réglages) ----------
+const SRC = { pf: [], rg: [] };
+const SRC_INFO = {};
+async function infoSources(list) {
+  const manque = list.map(s => s.chemin).filter(c => !(c in SRC_INFO));
+  if (manque.length) { try { (await api("/api/sources", { chemins: manque })).sources.forEach(i => SRC_INFO[i.chemin] = i); } catch (e) {} }
+}
+async function rendreSources(cible) {
+  const box = $(cible + "-sources"), list = SRC[cible]; await infoSources(list);
+  box.innerHTML = list.length ? "" : '<div class="empty small">Aucune source pour l\'instant.</div>';
+  list.forEach((s, i) => {
+    const info = SRC_INFO[s.chemin] || {}, absent = info.type === "absent";
+    const nom = (s.chemin.replace(/\/+$/, "").split("/").pop()) || s.chemin;
+    const row = document.createElement("div"); row.className = "src-row" + (s.actif ? "" : " off");
+    row.innerHTML = `<label class="tog" title="Utiliser cette source"><input type="checkbox" ${s.actif ? "checked" : ""}><span></span></label>
+      <svg class="ic lg"><use href="#i-${info.type === "fichier" ? "file" : "folder"}"/></svg>
+      <div class="src-txt"><b>${esc(nom)}</b><span title="${esc(s.chemin)}">${esc(s.chemin)}</span></div>
+      <span class="src-n ${absent ? "bad" : ""}">${absent ? "introuvable" : (info.nombre === undefined ? "" : info.nombre + (info.nombre > 1 ? " fichiers" : " fichier"))}</span>
+      <button class="btn plain icon" title="Retirer"><svg class="ic"><use href="#i-x"/></svg></button>`;
+    row.querySelector("input").onchange = (e) => { s.actif = e.target.checked; row.classList.toggle("off", !s.actif); };
+    row.querySelector("button").onclick = () => { list.splice(i, 1); rendreSources(cible); };
+    box.appendChild(row);
+  });
+}
+document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => busy(b, async () => {
+  const cible = b.dataset.target, r = await api(b.dataset.add === "dossier" ? "/api/choisir-dossier" : "/api/choisir-fichier", {});
+  if (r.chemin && !SRC[cible].some(s => s.chemin === r.chemin)) { SRC[cible].push({ chemin: r.chemin, actif: true }); }
+  await rendreSources(cible);
+}));
+
+// ---------- contrôles à choix ----------
+function segGet(id) { const b = $(id).querySelector(".on"); return b ? b.dataset.v : $(id).dataset.def; }
+function segSet(id, v) { $(id).querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+document.querySelectorAll(".segc").forEach(c => { c.dataset.def = c.querySelector("button").dataset.v; c.querySelectorAll("button").forEach(b => b.onclick = () => segSet(c.id, b.dataset.v)); });
+
+// ---------- profils ----------
+const HEBERGEURS = {
+  infomaniak: { hote: "mail.infomaniak.com", port: 993, aide: "Mot de passe de la boîte mail. Avec la double authentification, créez un mot de passe d'application dans votre compte Infomaniak." },
+  gmail: { hote: "imap.gmail.com", port: 993, aide: "Gmail exige un mot de passe d'application (compte Google › Sécurité), pas votre mot de passe habituel." },
+  icloud: { hote: "imap.mail.me.com", port: 993, aide: "iCloud exige un mot de passe pour app (appleid.apple.com › Connexion et sécurité)." },
+  outlook: { hote: "outlook.office365.com", port: 993, aide: "Microsoft 365 : l'accès IMAP doit être activé par votre administrateur." },
+  autre: { hote: "", port: 993, aide: "Indiquez le serveur IMAP dans les options avancées. Il est stocké dans le Trousseau macOS." },
+};
+function hebergeurDe(hote) { return Object.keys(HEBERGEURS).find(k => HEBERGEURS[k].hote && HEBERGEURS[k].hote === hote) || (hote ? "autre" : "infomaniak"); }
+function appliquerHebergeur(k, force) {
+  const h = HEBERGEURS[k]; $("pf-mdp-aide").textContent = h.aide;
+  if (k !== "autre" && (force || !$("pf-imap_hote").value)) { $("pf-imap_hote").value = h.hote; $("pf-imap_port").value = h.port; }
+  $("pf-hebergeur").value = k;
+}
+$("pf-hebergeur").onchange = () => appliquerHebergeur($("pf-hebergeur").value, true);
+
+const CHAMPS = ["nom", "nom_affiche", "email", "imap_hote", "imap_port", "imap_utilisateur", "dossier_brouillons", "ton", "consignes", "signature"];
+function rendrePartagees() {
+  const n = (ETAT.reglages.sources_globales || []).filter(s => s.actif).length;
+  $("pf-partagees").textContent = n ? "+ " + n + " source" + (n > 1 ? "s" : "") + " partagée" + (n > 1 ? "s" : "") + " avec tous les profils (Réglages)." : "";
+}
+function rendreProfils() {
+  const box = $("liste-profils"); box.innerHTML = "";
+  if (!ETAT.profils.length) box.innerHTML = '<div class="empty small">Aucun profil pour l\'instant.</div>';
+  ETAT.profils.forEach(p => {
+    const d = document.createElement("div"); d.className = "msg-item" + ($("pf-id").value === p.id ? " on" : "");
+    d.innerHTML = `<div class="top"><span class="from">${esc(p.nom)}</span></div><div class="meta">${esc(p.email)}</div>`;
+    d.onclick = () => editerProfil(p); box.appendChild(d);
+  });
+  rendrePartagees();
+}
+function remplir(p) {
+  CHAMPS.forEach(c => $("pf-" + c).value = p[c] == null ? "" : p[c]);
+  segSet("pf-adresse", p.adresse || "auto"); segSet("pf-registre", p.registre || "cordial"); segSet("pf-longueur", p.longueur || "normal");
+  $("pf-envoyes_nb").value = String(p.envoyes_nb == null ? 8 : p.envoyes_nb);
+  $("pf-citer_original").checked = p.citer_original !== false;
+  SRC.pf = (p.sources_modeles || []).map(s => ({ ...s })); rendreSources("pf");
+  appliquerHebergeur(hebergeurDe(p.imap_hote), false);
+  $("pf-mot_de_passe").value = ""; $("pf-test").classList.add("hidden");
+}
+function editerProfil(p) {
+  $("pf-id").value = p.id; remplir(p);
+  $("pf-mdp-etat").innerHTML = p.mot_de_passe_enregistre ? '<span class="status-ok">· enregistré</span>' : '<span class="status-ko">· manquant</span>';
+  $("b-supprimer").classList.remove("hidden"); $("b-dupliquer").classList.remove("hidden"); rendreProfils();
+}
+function nouveauProfil(modele) {
+  $("pf-id").value = ""; remplir(modele || { imap_hote: "mail.infomaniak.com", imap_port: 993 });
+  if (modele) { $("pf-nom").value = ""; $("pf-email").value = ""; $("pf-imap_utilisateur").value = ""; $("pf-signature").value = ""; }
+  $("pf-mdp-etat").textContent = ""; $("b-supprimer").classList.add("hidden"); $("b-dupliquer").classList.add("hidden");
+  rendreProfils(); $("pf-nom").focus();
+}
+function lireFormulaire() {
+  const v = { id: $("pf-id").value }; CHAMPS.forEach(c => v[c] = $("pf-" + c).value);
+  v.adresse = segGet("pf-adresse"); v.registre = segGet("pf-registre"); v.longueur = segGet("pf-longueur");
+  v.envoyes_nb = parseInt($("pf-envoyes_nb").value, 10); v.citer_original = $("pf-citer_original").checked;
+  v.sources_modeles = SRC.pf;
+  if ($("pf-mot_de_passe").value) v.mot_de_passe = $("pf-mot_de_passe").value;
+  return v;
+}
+async function testerConnexion() {
+  const box = $("pf-test"); box.classList.remove("hidden"); box.textContent = "Connexion…";
+  try {
+    const r = await api("/api/profils/tester", lireFormulaire());
+    box.innerHTML = '<b class="status-ok">✓ Connexion réussie.</b> Brouillons : <b>' + esc(r.brouillons || "non trouvé, indiquez-le dans les options avancées") +
+      "</b> · Envoyés : <b>" + esc(r.envoyes || "non trouvé") + "</b>";
+  } catch (e) { box.innerHTML = '<b class="status-ko">✕</b> ' + esc(e.message); }
+}
+$("b-nouveau").onclick = () => nouveauProfil();
+$("b-dupliquer").onclick = () => nouveauProfil(lireFormulaire());
+$("b-tester").onclick = () => busy($("b-tester"), testerConnexion);
+$("b-enregistrer").onclick = () => busy($("b-enregistrer"), async () => {
+  const v = lireFormulaire(); if (!v.email) throw new Error("L'adresse email est obligatoire.");
+  const avecMdp = !!v.mot_de_passe;
+  const p = await api("/api/profils", v);
+  if (!$("profil").value || !ETAT.profils.length) localSet("profil", p.id);
+  await charger(); editerProfil(p); toast("✓ Profil enregistré.");
+  if (avecMdp) await testerConnexion();
+});
+$("b-supprimer").onclick = () => busy($("b-supprimer"), async () => {
+  if (!confirm("Supprimer ce profil et son mot de passe du Trousseau ?")) return;
+  await api("/api/profils/supprimer", { id: $("pf-id").value }); nouveauProfil(); await charger(); toast("Profil supprimé.");
+});
+
+// ---------- réglages ----------
+const RG = ["gemini_chemin", "gemini_modele", "gemini_delai", "nb_messages", "port", "depot_github"];
+function rendreReglages() {
+  RG.forEach(k => $("rg-" + k).value = ETAT.reglages[k] == null ? "" : ETAT.reglages[k]);
+  SRC.rg = (ETAT.reglages.sources_globales || []).map(s => ({ ...s })); rendreSources("rg");
+  $("rg-version").textContent = "· version " + (ETAT.version || "");
+  $("rg-jeton-etat").innerHTML = ETAT.jeton_github ? '<span class="status-ok">· enregistré</span>' : "";
+  $("rg-detecte").innerHTML = ETAT.gemini_trouve ? '<b class="status-ok">✓</b> Commande trouvée : <b>' + esc(ETAT.gemini_trouve) + "</b>"
+    : '<b class="status-ko">✕ Commande agy introuvable.</b> Ouvrez les options avancées et collez le résultat de « which agy ».';
+}
+$("b-reglages").onclick = () => busy($("b-reglages"), async () => {
+  const v = {}; RG.forEach(k => v[k] = $("rg-" + k).value); v.sources_globales = SRC.rg;
+  if ($("rg-jeton_github").value) v.jeton_github = $("rg-jeton_github").value;
+  await api("/api/reglages", v); await charger(); toast("✓ Réglages enregistrés.");
+});
+
+// ---------- sauvegarde et mises à jour ----------
+$("b-exporter").onclick = () => busy($("b-exporter"), async () => { const r = await api("/api/sauvegarde/exporter", {}); toast("✓ Exporté : " + r.chemin); });
+$("b-importer").onclick = () => busy($("b-importer"), async () => {
+  const f = await api("/api/choisir-fichier", {}); if (!f.chemin) return;
+  if (!confirm("Remplacer tous les profils et réglages par ceux de ce fichier ? Une sauvegarde de l'état actuel est faite avant.")) return;
+  const r = await api("/api/sauvegarde/importer", { chemin: f.chemin }); await charger();
+  toast("✓ " + r.profils + " profil(s) importé(s). Ressaisissez les mots de passe (non exportés).");
+});
+$("b-sauvegardes").onclick = () => api("/api/ouvrir-sauvegardes", {}).catch(e => toast(e.message, true));
+async function chercherMaj() {
+  const box = $("rg-maj"); box.classList.remove("hidden"); box.textContent = "Recherche…";
+  try {
+    if ($("rg-depot_github").value !== (ETAT.reglages.depot_github || "") || $("rg-jeton_github").value) { $("b-reglages").click(); await new Promise(r => setTimeout(r, 700)); }
+    const r = await api("/api/mise-a-jour/verifier", {});
+    if (!r.disponible) { box.innerHTML = '<b class="status-ok">✓ À jour</b> (version ' + esc(r.actuelle) + ").<div class='help'>Dernière version publiée : " + esc(r.derniere) + "</div>"; return; }
+    box.innerHTML = "<b>Version " + esc(r.derniere) + " disponible</b> (vous avez la " + esc(r.actuelle) + ")." +
+      (r.notes ? '<div class="help" style="white-space:pre-wrap;margin:6px 0">' + esc(r.notes.slice(0, 600)) + "</div>" : "") +
+      (r.asset_url ? '<button class="btn" id="b-telecharger" style="margin-top:8px">Télécharger l\'installateur</button>' : '<div class="help">Aucun fichier .dmg dans cette version.</div>');
+    if (r.asset_url) $("b-telecharger").onclick = () => busy($("b-telecharger"), async () => {
+      await api("/api/mise-a-jour/telecharger", { url: r.asset_url, nom: r.asset_nom });
+      toast("✓ Téléchargé et ouvert : glissez Assistant Email dans Applications, puis relancez-le. Vos réglages sont conservés.");
+    });
+  } catch (e) { box.innerHTML = '<b class="status-ko">✕</b> ' + esc(e.message); }
+}
+$("b-maj").onclick = () => busy($("b-maj"), chercherMaj);
+
+// ---------- actions venues de la barre de menus ----------
+function action(a) {
+  if (a === "mail") lireMail();
+  else if (a === "presse-papiers") collerPressePapiers().then(() => $("b-utiliser").click());
+  else if (a === "profils") $("b-ouvrir-profils").click();
+  else if (a === "reglages") sheet("reglages", true);
+  else if (a === "mise-a-jour") { sheet("reglages", true); $("b-maj").click(); }
+}
+setInterval(async () => { try { (await api("/api/evenements")).actions.forEach(action); } catch (e) {} }, 1000);
+
+charger().then(() => {
+  const a = location.hash.slice(1); if (a) { history.replaceState(null, "", location.pathname + location.search); action(a); }
+  else if (profilId()) rafraichir();
+}).catch(e => toast(e.message, true));
+</script>
+</body>
+</html>
