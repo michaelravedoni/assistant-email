@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
 import rumps
 
-from . import action_rapide, config, macos, sauvegarde, server
+import webbrowser
+
+from . import action_rapide, config, journal, macos, sauvegarde, server
 
 
 ICON = Path(__file__).parent / "assets" / "barre_menus@2x.png"
@@ -38,11 +41,31 @@ class AssistantApp(rumps.App):
 
     def surveiller_declencheur(self, _timer) -> None:
         """L'action rapide de Mail dépose un fichier : on ouvre alors l'assistant sur le message sélectionné."""
+        self.verifier_fenetre()
         action = action_rapide.lire_declencheur()
         if action:
             self.show(action)
 
     def show(self, action: str) -> None:
+        try:
+            self._show(action)
+        except Exception:
+            journal.erreur("ouverture de la fenêtre (%s)" % action)
+            rumps.alert("Assistant Email", "Impossible d'ouvrir la fenêtre. Détails dans :\n%s" % (config.app_home() / "journal.log"))
+
+    def _commande_fenetre(self, url: str):
+        if getattr(sys, "frozen", False):
+            # Dans l'app empaquetée, sys.executable est l'interpréteur interne : il faut relancer l'exécutable principal.
+            principal = Path(sys.executable).parent / "Assistant Email"
+            try:
+                from Foundation import NSBundle
+                principal = Path(NSBundle.mainBundle().executablePath())
+            except Exception:
+                pass
+            return [str(principal), "--fenetre", url]
+        return [sys.executable, "-m", "assistant_email.fenetre", url]
+
+    def _show(self, action: str) -> None:
         alive = self.window is not None and self.window.poll() is None
         if alive and server.window_is_open():
             if action:
@@ -51,11 +74,32 @@ class AssistantApp(rumps.App):
             return
         if alive:
             self.window.terminate()
-        if getattr(sys, "frozen", False):   # app empaquetée : on relance l'app elle-même en mode fenêtre
-            cmd = [sys.executable, "--fenetre", self.srv.url(action)]
-        else:
-            cmd = [sys.executable, "-m", "assistant_email.fenetre", self.srv.url(action)]
-        self.window = subprocess.Popen(cmd)
+        url = self.srv.url(action)
+        cmd = self._commande_fenetre(url)
+        journal.ecrire("ouverture de la fenêtre : %s" % " ".join(cmd))
+        err = (config.app_home() / "fenetre.log").open("w")
+        self.window = subprocess.Popen(cmd, stderr=err, stdout=err)
+        self.fallback = (self.window, url, time.time())
+
+    def verifier_fenetre(self) -> None:
+        """Si la fenêtre se ferme tout de suite (erreur), on le note et on ouvre l'assistant dans le navigateur."""
+        fb = getattr(self, "fallback", None)
+        if not fb:
+            return
+        proc, url, t0 = fb
+        code = proc.poll()
+        if code is None:
+            if time.time() - t0 > 6:
+                self.fallback = None
+            return
+        self.fallback = None
+        if code != 0 and time.time() - t0 < 6:
+            try:
+                detail = (config.app_home() / "fenetre.log").read_text(errors="ignore")[-1500:]
+            except OSError:
+                detail = ""
+            journal.ecrire("la fenêtre s'est fermée avec le code %s\n%s" % (code, detail))
+            webbrowser.open(url)
 
     def quit(self, _sender) -> None:
         if self.window is not None and self.window.poll() is None:
@@ -65,6 +109,7 @@ class AssistantApp(rumps.App):
 
 
 def main() -> int:
+    journal.ecrire("démarrage (frozen=%s, exécutable=%s)" % (getattr(sys, "frozen", False), sys.executable))
     sauvegarde.sauvegarder_si_modifie()
     action_rapide.lire_declencheur(age_max=0)     # ignore un déclencheur resté d'une session précédente
     try:
@@ -76,5 +121,9 @@ def main() -> int:
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     except Exception:
         pass
-    AssistantApp().run()
+    try:
+        AssistantApp().run()
+    except Exception:
+        journal.erreur("démarrage de la barre de menus")
+        raise
     return 0

@@ -50,6 +50,8 @@ def main(url: str) -> int:
         webbrowser.open(url)
         return 0
     _brand()
+    from . import journal
+    journal.ecrire("fenêtre : ouverture de %s" % url)
     webview.create_window("Assistant Email", url, js_api=Api(), width=1360, height=880,
                           min_size=(960, 640), text_select=True)
     webview.start()
