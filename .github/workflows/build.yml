@@ -1,7 +1,8 @@
 name: Construire l'application
 
 # Se lance à chaque envoi sur main, et à la main. Une étiquette « v0.3.0 » publie en plus une version (Release)
-# avec le fichier .dmg à télécharger.
+# avec le fichier .dmg à télécharger. Un lancement manuel (bouton « Run workflow ») publie aussi la version
+# correspondant au numéro de __init__.py.
 on:
   push:
     branches: [main]
@@ -93,8 +94,10 @@ jobs:
           path: AssistantEmail-*.dmg
 
       - name: Publier la version
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           files: AssistantEmail-*.dmg
           generate_release_notes: true
