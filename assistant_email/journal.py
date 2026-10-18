@@ -11,7 +11,7 @@ def ecrire(message: str) -> None:
     try:
         path = config.app_home() / "journal.log"
         if path.exists() and path.stat().st_size > 500000:   # évite un fichier qui grossit sans fin
-            path.write_text(path.read_text(errors="ignore")[-100000:])
+            path.write_text(path.read_text(encoding="utf-8", errors="ignore")[-100000:], encoding="utf-8")
         with path.open("a", encoding="utf-8") as f:
             f.write("%s  %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), message))
     except Exception:

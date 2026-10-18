@@ -24,7 +24,7 @@ def declencheur() -> Path:
 
 
 def ecrire_declencheur(action: str = "mail") -> None:
-    declencheur().write_text(action)
+    declencheur().write_text(action, encoding="utf-8")
 
 
 def lire_declencheur(age_max: float = 30.0) -> Optional[str]:
@@ -32,7 +32,7 @@ def lire_declencheur(age_max: float = 30.0) -> Optional[str]:
     p = declencheur()
     try:
         fresh = time.time() - p.stat().st_mtime < age_max
-        action = p.read_text().strip()
+        action = p.read_text(encoding="utf-8").strip()
         p.unlink()
     except OSError:
         return None

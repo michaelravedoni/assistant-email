@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -57,7 +58,7 @@ def _which_login_shell(name: str) -> Optional[str]:
         if not os.path.exists(args[0]):
             continue
         try:
-            res = subprocess.run(args, capture_output=True, text=True, timeout=15, stdin=subprocess.DEVNULL)
+            res = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, stdin=subprocess.DEVNULL)
         except (OSError, subprocess.TimeoutExpired):
             continue
         for line in reversed(res.stdout.strip().splitlines()):
@@ -92,7 +93,9 @@ def is_agy(path: str) -> bool:
 
 def _agy_command(path: str, prompt: str, settings: Dict[str, Any]) -> Tuple[List[str], Optional[str]]:
     cmd = [path]
-    if len(prompt.encode("utf-8")) <= MAX_ARG_BYTES:
+    # Si l'encodage des arguments n'est pas l'UTF-8 (app lancée sans langue définie), les accents passent par l'entrée standard.
+    utf8_args = sys.getfilesystemencoding().lower().replace("-", "") == "utf8"
+    if utf8_args and len(prompt.encode("utf-8")) <= MAX_ARG_BYTES:
         cmd += ["-p", prompt, "--output-format", "json"]
         stdin = None
     else:
@@ -166,7 +169,7 @@ def run(prompt: str, settings: Dict[str, Any]) -> str:
         stdin = prompt
     workdir = tempfile.mkdtemp(prefix="assistant-email-")  # dossier vide : l'IA n'a rien à lire
     try:
-        res = subprocess.run(cmd, input=stdin or "", capture_output=True, text=True, cwd=workdir,
+        res = subprocess.run(cmd, input=stdin or "", capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=workdir,
                              env=_env_with(path), timeout=int(settings.get("gemini_delai", 240)) + 30)
     except subprocess.TimeoutExpired:
         raise GeminiError("L'IA n'a pas répondu à temps. Réessayez ou augmentez le délai dans les réglages.")

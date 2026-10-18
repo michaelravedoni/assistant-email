@@ -37,7 +37,7 @@ def setUpModule():
     for name, src in (("agy", "fake_agy.py"), ("gemini", "fake_gemini.py")):
         fake = Path(TMP) / "bin" / name
         fake.parent.mkdir(exist_ok=True)
-        fake.write_text((ROOT / "tests" / src).read_text(), encoding="utf-8")
+        fake.write_text((ROOT / "tests" / src).read_text(encoding="utf-8"), encoding="utf-8")
         fake.chmod(0o755)
     config.save_settings({"gemini_chemin": str(Path(TMP) / "bin" / "agy")})
 
@@ -57,7 +57,7 @@ class TestProfils(unittest.TestCase):
         self.assertEqual(p["imap_utilisateur"], "moi@exemple.ch")
         self.assertEqual(p["imap_hote"], "mail.infomaniak.com")
         self.assertTrue(p["mot_de_passe_enregistre"])
-        self.assertNotIn("mot_de_passe", json.loads((Path(TMP) / "profils.json").read_text()))
+        self.assertNotIn("mot_de_passe", json.loads((Path(TMP) / "profils.json").read_text(encoding="utf-8")))
         p2 = service.save_profile({"id": p["id"], "ton": "Tutoiement"})
         self.assertEqual(p2["email"], "moi@exemple.ch")
         self.assertEqual(p2["ton"], "Tutoiement")
@@ -121,8 +121,8 @@ class TestOutilsApp(unittest.TestCase):
         service.save_profile({"id": config.load_profiles()[0]["id"], "ton": "Autre ton"})
         self.assertGreaterEqual(len([d for d in sauvegarde.dossier().iterdir() if d.is_dir()]), 2)
         out = sauvegarde.exporter(Path(TMP) / "export.json")
-        data = json.loads(out.read_text())
-        self.assertNotIn("secret", out.read_text())                      # aucun mot de passe exporté
+        data = json.loads(out.read_text(encoding="utf-8"))
+        self.assertNotIn("secret", out.read_text(encoding="utf-8"))                      # aucun mot de passe exporté
         service.delete_profile(config.load_profiles()[0]["id"])
         self.assertEqual(config.load_profiles(), [])
         self.assertEqual(sauvegarde.importer(out)["profils"], 1)
@@ -297,7 +297,7 @@ class TestPromptEtGemini(unittest.TestCase):
         self.assertEqual(r["modeles_utilises"], ["devis.md"])
         self.assertTrue(r["corps"].endswith("Atelier Exemple"))
         self.assertNotIn("**", r["corps"])
-        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text())
+        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text(encoding="utf-8"))
         self.assertEqual(log["mode"], "json")
         self.assertIn("--output-format", log["argv"])
         self.assertIn("--print-timeout", log["argv"])
@@ -306,7 +306,7 @@ class TestPromptEtGemini(unittest.TestCase):
         self.assertNotEqual(Path(log["cwd"]).resolve(), ROOT)
         # Ajustement : la signature du brouillon précédent n'est pas renvoyée au modèle
         service.generate(self.p["id"], conv["texte"], "", "", r["corps"], "plus court")
-        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text())
+        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text(encoding="utf-8"))
         self.assertIn("plus court", log["prompt"])
         prev = log["prompt"].split("# Brouillon précédent")[1]
         self.assertNotIn("Atelier Exemple", prev.split("# Modifications")[0])
@@ -314,13 +314,13 @@ class TestPromptEtGemini(unittest.TestCase):
     def test_style_des_envoyes(self):
         r = service.generate(self.p["id"], "conv", "oui")
         self.assertEqual(r["nb_envoyes"], 1)
-        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text())
+        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text(encoding="utf-8"))
         self.assertIn("<envoye>", log["prompt"])
         self.assertIn("Voici le devis : 4800 CHF", log["prompt"])
         service.save_profile({"id": self.p["id"], "envoyes_nb": 0})
         r = service.generate(self.p["id"], "conv", "oui")
         self.assertEqual(r["nb_envoyes"], 0)
-        self.assertNotIn("<envoye>", json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text())["prompt"])
+        self.assertNotIn("<envoye>", json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text(encoding="utf-8"))["prompt"])
 
     def test_strip_quoted(self):
         t = "Bonjour,\nOui c'est bon.\n\nLe 12 oct. 2026 à 09:00, Claire <c@x.ch> a écrit :\n> blabla"
@@ -328,7 +328,7 @@ class TestPromptEtGemini(unittest.TestCase):
 
     def test_gros_prompt_par_stdin(self):
         r = service.generate(self.p["id"], "x" * 200000, "réponds")
-        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text())
+        log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text(encoding="utf-8"))
         self.assertEqual(log["mode"], "stream")
         self.assertNotIn("-p", log["argv"])
         self.assertEqual(r["modeles_utilises"], ["devis.md"])
@@ -338,7 +338,7 @@ class TestPromptEtGemini(unittest.TestCase):
         try:
             r = service.generate(self.p["id"], "conv", "oui")
             self.assertIn("6 semaines", r["corps"])
-            log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text())
+            log = json.loads(Path(os.environ["FAKE_GEMINI_LOG"]).read_text(encoding="utf-8"))
             self.assertIn("conv", log["stdin"])
         finally:
             config.save_settings({"gemini_chemin": str(Path(TMP) / "bin" / "agy")})

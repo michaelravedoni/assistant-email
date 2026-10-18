@@ -31,7 +31,7 @@ def get_password(account: str) -> Optional[str]:
         return _memory.get(account)
     res = subprocess.run(
         ["security", "find-generic-password", "-a", account, "-s", SERVICE, "-w"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if res.returncode != 0:
         return None

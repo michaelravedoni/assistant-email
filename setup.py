@@ -31,6 +31,7 @@ OPTIONS = {
         "NSMicrophoneUsageDescription": "Dicter votre réponse.",
         "NSSpeechRecognitionUsageDescription": "Dicter votre réponse.",
         "NSHighResolutionCapable": True,
+        "LSEnvironment": {"LANG": "fr_FR.UTF-8", "LC_ALL": "fr_FR.UTF-8", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
     },
 }
 

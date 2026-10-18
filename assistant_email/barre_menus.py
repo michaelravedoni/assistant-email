@@ -77,7 +77,7 @@ class AssistantApp(rumps.App):
         url = self.srv.url(action)
         cmd = self._commande_fenetre(url)
         journal.ecrire("ouverture de la fenêtre : %s" % " ".join(cmd))
-        err = (config.app_home() / "fenetre.log").open("w")
+        err = (config.app_home() / "fenetre.log").open("w", encoding="utf-8")
         self.window = subprocess.Popen(cmd, stderr=err, stdout=err)
         self.fallback = (self.window, url, time.time())
 
@@ -95,7 +95,7 @@ class AssistantApp(rumps.App):
         self.fallback = None
         if code != 0 and time.time() - t0 < 6:
             try:
-                detail = (config.app_home() / "fenetre.log").read_text(errors="ignore")[-1500:]
+                detail = (config.app_home() / "fenetre.log").read_text(encoding="utf-8", errors="ignore")[-1500:]
             except OSError:
                 detail = ""
             journal.ecrire("la fenêtre s'est fermée avec le code %s\n%s" % (code, detail))
@@ -114,8 +114,8 @@ def main() -> int:
     action_rapide.lire_declencheur(age_max=0)     # ignore un déclencheur resté d'une session précédente
     try:
         action_rapide.installer()
-    except OSError:
-        pass
+    except Exception:
+        journal.erreur("installation de l'action rapide")
     try:  # pas d'icône dans le Dock : uniquement la barre de menus
         from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)

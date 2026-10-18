@@ -35,7 +35,7 @@ def sauvegarder_si_modifie() -> Optional[Path]:
         return None
     marque = dossier() / ".derniere"
     actuel = _empreinte()
-    if marque.exists() and marque.read_text() == actuel:
+    if marque.exists() and marque.read_text(encoding="utf-8") == actuel:
         return None
     cible = dossier() / datetime.now().strftime("%Y%m%d-%H%M%S")
     n = 1
@@ -47,7 +47,7 @@ def sauvegarder_si_modifie() -> Optional[Path]:
         p = config.app_home() / name
         if p.exists():
             shutil.copy2(p, cible / name)
-    marque.write_text(actuel)
+    marque.write_text(actuel, encoding="utf-8")
     anciennes = sorted(d for d in dossier().iterdir() if d.is_dir())
     for d in anciennes[:-GARDER]:
         shutil.rmtree(d, ignore_errors=True)
