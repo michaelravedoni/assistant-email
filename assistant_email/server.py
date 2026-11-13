@@ -31,6 +31,13 @@ def window_is_open() -> bool:
     return time.time() - LAST_POLL[0] < 4
 
 
+def _generer(b: Dict[str, Any]) -> Dict[str, Any]:
+    if b.get("async"):      # la fenêtre suit l'avancement par /api/generation
+        return service.start_generation(b.get("cle", ""), b)
+    return service.generate(b["profil"], b.get("conversation", ""), b.get("dictee", ""), b.get("objet", ""),
+                            b.get("brouillon_precedent"), b.get("ajustement"))
+
+
 def _routes() -> Dict[Tuple[str, str], Callable[[Dict[str, Any]], Any]]:
     return {
         ("GET", "/api/etat"): lambda q: service.state(),
@@ -53,9 +60,10 @@ def _routes() -> Dict[Tuple[str, str], Callable[[Dict[str, Any]], Any]]:
         ("GET", "/api/presse-papiers"): lambda q: {"texte": macos.clipboard_text()},
         ("POST", "/api/copier"): lambda b: macos.copy_to_clipboard(b["texte"]) or {"ok": True},
         ("GET", "/api/evenements"): _poll_events,
-        ("POST", "/api/generer"): lambda b: service.generate(
-            b["profil"], b.get("conversation", ""), b.get("dictee", ""), b.get("objet", ""),
-            b.get("brouillon_precedent"), b.get("ajustement")),
+        ("POST", "/api/generer"): _generer,
+        ("GET", "/api/generation"): lambda q: service.taches.lire(q["id"]),
+        ("POST", "/api/annuler"): lambda b: service.taches.annuler(b["id"]),
+        ("GET", "/api/modeles"): lambda q: service.list_models(),
         ("POST", "/api/texte-final"): lambda b: {"texte": service.full_text(b["profil"], b["corps"], b.get("citation"))},
         ("POST", "/api/deposer"): lambda b: service.deposit(
             b["profil"], b.get("a", ""), b.get("cc", ""), b.get("objet", ""), b["corps"],

@@ -54,6 +54,12 @@ Pour un dépôt privé, les Réglages demandent le dépôt (`propriétaire/dép�
 
 Au premier lancement, l'app installe l'action **« Répondre avec l'IA »**. Dans Mail, sélectionnez un message puis : menu **Mail › Services › Répondre avec l'IA**. Pour un raccourci clavier : Réglages Système › Clavier › Raccourcis clavier › Services › Général (ou « Mail ») › cochez l'action et double-cliquez à droite pour choisir la combinaison. L'assistant s'ouvre alors sur le message sélectionné.
 
+## Rédaction : suivi, annulation, plusieurs emails
+La rédaction tourne en tâche de fond : la fenêtre affiche l'étape en cours et le temps écoulé, avec un bouton **Annuler**.
+Vous pouvez ouvrir un autre message pendant ce temps (jusqu'à 3 rédactions en parallèle) : les brouillons sont gardés par
+conversation et signalés dans la liste. Le modèle d'IA se choisit dans Réglages › Options avancées (« Charger la liste »
+interroge agy). Chaque rédaction écrit ses durées dans `journal.log` (modèles, envoyés, démarrage d'agy, réponse).
+
 ## Non lus et suivis
 
 La liste de la boîte affiche une pastille bleue pour les non lus et une étoile pour les suivis. Filtres **Tous / Non lus / ★** (le dernier choix est mémorisé par profil) et tri par date, non lus d'abord ou suivis d'abord. Ouvrir un message dans l'assistant **ne le marque jamais comme lu** : les boutons « Marquer lu » et « Suivre » en haut de la conversation sont les seules écritures faites sur vos messages, et seulement quand vous cliquez.

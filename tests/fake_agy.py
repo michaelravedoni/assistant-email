@@ -2,6 +2,9 @@
 """Faux binaire `agy` (Antigravity CLI) : mode headless -p / stream-json, enregistre ce qu'il reçoit."""
 import json, os, sys
 args = sys.argv[1:]
+if args[:1] == ["models"]:
+    print("Available models:\n  gemini-3-pro (default)\n  gemini-3-flash   fast\n- claude-sonnet-5")
+    sys.exit(0)
 reponse = ("<objet>Re: Devis site web</objet>\n<corps>\nBonjour Claire,\n\nLe délai de **6 semaines** est ferme "
            "dès réception de l'acompte.\n\nMeilleures salutations\n</corps>\n<modeles>devis.md</modeles>")
 if "--input-format" in args:
@@ -13,9 +16,11 @@ else:
     mode = "json"
 with open(os.environ["FAKE_GEMINI_LOG"], "w", encoding="utf-8") as fh:
     json.dump({"argv": args, "prompt": prompt, "mode": mode, "cwd": os.getcwd()}, fh)
+import time
+time.sleep(float(os.environ.get("FAKE_GEMINI_SLEEP", "0")))
 fail = os.environ.get("FAKE_GEMINI_FAIL")
 env = {"conversation_id": "c1", "status": "ERROR" if fail else "SUCCESS", "response": "" if fail else reponse,
-       "duration_seconds": 1.2, "num_turns": 1, "usage": {"total_tokens": 10}}
+       "model": "gemini-3-flash", "duration_seconds": 1.2, "num_turns": 1, "usage": {"total_tokens": 10}}
 if fail:
     env["error"] = "authentication required"
 if mode == "json":

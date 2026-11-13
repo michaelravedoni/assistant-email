@@ -144,6 +144,12 @@ textarea { resize: vertical; line-height: 1.55; }
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
 .actions .grow { flex: 1; }
 .check { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12.5px; cursor: pointer; }
+.progres { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-2); font-size: 13px; }
+.progres .pg-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.progres .pg-texte span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progres .pg-temps { color: var(--muted); font-variant-numeric: tabular-nums; }
+.progres.alerte .pg-texte span { color: var(--warn, #b45309); white-space: normal; }
+.tag-ia { font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 99px; padding: 0 7px; margin-left: 6px; font-weight: 500; }
 .skeleton { padding: 14px; }
 .skeleton i { display: block; height: 11px; border-radius: 6px; margin: 10px 0; background: linear-gradient(90deg, var(--field) 0%, var(--line-2) 50%, var(--field) 100%);
   background-size: 200% 100%; animation: shimmer 1.2s infinite linear; }
@@ -329,6 +335,8 @@ textarea { resize: vertical; line-height: 1.55; }
               <label class="toggle-all"><input type="checkbox" id="tous"> Répondre à tous</label></div>
             <div class="field-row"><label for="objet">Objet</label><input type="text" id="objet"></div>
           </div>
+          <div id="progres" class="progres hidden"><span class="spin"></span><div class="pg-texte"><b id="pg-etape"></b><span id="pg-detail"></span></div>
+            <span class="pg-temps" id="pg-temps"></span><button class="btn ghost" id="b-annuler">Annuler</button></div>
           <div id="squelette" class="skeleton hidden"><i style="width:30%"></i><i style="width:92%"></i><i style="width:85%"></i><i style="width:60%"></i><i style="width:25%"></i></div>
           <textarea id="corps" placeholder="Le brouillon rédigé apparaîtra ici. Vous pourrez le modifier librement."></textarea>
           <div class="used hidden" id="modeles-utilises"></div>
@@ -481,8 +489,11 @@ textarea { resize: vertical; line-height: 1.55; }
             <div class="f full"><label>Commande (vide = détection automatique de agy)</label>
               <input type="text" id="rg-gemini_chemin" placeholder="~/.local/bin/agy">
               <div class="help">Dans un terminal, « which agy » donne le chemin.</div></div>
-            <div class="f"><label>Modèle</label><input type="text" id="rg-gemini_modele" placeholder="Par défaut">
-              <div class="help">Liste : « agy models » dans un terminal.</div></div>
+            <div class="f full"><label>Modèle d'IA</label>
+              <div style="display:flex;gap:8px"><input type="text" id="rg-gemini_modele" list="liste-modeles" placeholder="Par défaut d'agy" style="flex:1">
+                <button class="btn ghost" id="b-modeles" type="button">Charger la liste</button></div>
+              <datalist id="liste-modeles"></datalist>
+              <div class="help" id="modeles-aide">Le bouton lit la liste actuelle auprès d'agy (elle évolue avec le temps). Vide : modèle par défaut d'agy.</div></div>
             <div class="f"><label>Délai maximum (secondes)</label><input type="number" id="rg-gemini_delai"></div>
             <div class="f"><label>Messages affichés dans la liste</label><input type="number" id="rg-nb_messages"></div>
             <div class="f"><label>Port local</label><input type="number" id="rg-port"></div>
@@ -500,6 +511,7 @@ const JETON = "__JETON__";
 const $ = (id) => document.getElementById(id);
 let ETAT = { profils: [], reglages: {} };
 let CTX = { texte: "", reponse: null };
+const BROUILLONS = {};      // état de rédaction de chaque conversation (plusieurs peuvent tourner en même temps)
 let SOURCE = "imap";
 
 async function api(path, body) {
@@ -577,6 +589,14 @@ document.querySelectorAll("#filtres button").forEach(b => b.onclick = () => {
   document.querySelectorAll("#filtres button").forEach(x => x.classList.toggle("on", x === b)); rafraichir();
 });
 $("tri").onchange = () => { localSet("tri", $("tri").value); rendreListe(); };
+function cleMessage(m) { return profilId() + "|" + $("dossier").value + "|" + m.uid; }
+function pastilleIA(m) {
+  const b = BROUILLONS[cleMessage(m)];
+  if (!b) return "";
+  if (b.tache) return '<span class="tag-ia">rédaction…</span>';
+  if (b.resultat && !b.applique) return '<span class="tag-ia">brouillon prêt</span>';
+  return b.corps ? '<span class="tag-ia">brouillon</span>' : "";
+}
 function rendreComptes() { $("n-nl").textContent = COMPTES.non_lus || ""; $("n-su").textContent = COMPTES.suivis || ""; }
 function rendreListe() {
   const box = $("liste"), tri = $("tri").value;
@@ -585,7 +605,7 @@ function rendreListe() {
   box.innerHTML = list.length ? "" : '<div class="empty"><span class="big"><svg class="ic xl"><use href="#i-inbox"/></svg></span>' + vide + "</div>";
   list.forEach(m => {
     const d = document.createElement("div"); d.className = "msg-item" + (m.lu ? "" : " unread") + (CTX.meta && CTX.meta.msg === m ? " on" : "");
-    d.innerHTML = `<div class="top"><span class="from">${m.lu ? "" : '<span class="dot"></span>'}<b>${esc(nameOf(m.de) || m.de)}</b></span>${m.suivi ? '<svg class="ic star"><use href="#i-star"/></svg>' : ""}<span class="date">${esc(shortDate(m.date, m.horodatage))}</span></div><div class="meta">${esc(m.objet || "(sans objet)")}</div>`;
+    d.innerHTML = `<div class="top"><span class="from">${m.lu ? "" : '<span class="dot"></span>'}<b>${esc(nameOf(m.de) || m.de)}</b>${pastilleIA(m)}</span>${m.suivi ? '<svg class="ic star"><use href="#i-star"/></svg>' : ""}<span class="date">${esc(shortDate(m.date, m.horodatage))}</span></div><div class="meta">${esc(m.objet || "(sans objet)")}</div>`;
     d.onclick = async () => {
       box.querySelectorAll(".msg-item").forEach(x => x.classList.remove("on")); d.classList.add("on");
       $("thread").innerHTML = '<div class="skeleton"><i style="width:40%"></i><i></i><i style="width:80%"></i></div>';
@@ -643,8 +663,16 @@ $("b-utiliser").onclick = () => {
 };
 
 // ---------- affichage de la conversation ----------
+function sauverEtat() {
+  if (!CTX.cle) return;
+  const b = BROUILLONS[CTX.cle] || (BROUILLONS[CTX.cle] = {});
+  Object.assign(b, { dictee: $("dictee").value, a: $("a").value, cc: $("cc").value, objet: $("objet").value, corps: $("corps").value,
+    info: $("modeles-utilises").innerHTML, ref: CTX.texte && CTX.reponse ? CTX.reponse.objet : "" });
+}
 function montrerConversation(data, meta) {
+  sauverEtat();
   CTX = { texte: data.texte || "", reponse: data.reponse || null, meta: meta || null };
+  CTX.cle = meta ? profilId() + "|" + meta.dossier + "|" + meta.uid : "texte";
   majBoutonsDrapeaux();
   const msgs = data.messages || [];
   const own = ETAT.profils.map(p => (p.email || "").toLowerCase());
@@ -676,7 +704,15 @@ function montrerConversation(data, meta) {
   $("inline-titre").textContent = "Conversation : " + $("conv-titre").textContent; $("inline-texte").textContent = CTX.texte;
   const r = CTX.reponse;
   $("a").value = r ? r.a : ""; $("objet").value = r ? r.objet : ""; $("tous").checked = false; $("cc").value = "";
-  $("corps").value = ""; $("modeles-utilises").classList.add("hidden");
+  $("corps").value = ""; $("modeles-utilises").classList.add("hidden"); $("dictee").value = ""; $("gen-etat").textContent = "";
+  const b = BROUILLONS[CTX.cle];
+  if (b) {
+    $("dictee").value = b.dictee || ""; $("a").value = b.a || $("a").value; $("cc").value = b.cc || ""; $("objet").value = b.objet || $("objet").value;
+    $("corps").value = b.corps || "";
+    if (b.info) { $("modeles-utilises").innerHTML = b.info; $("modeles-utilises").classList.remove("hidden"); }
+    if (b.resultat && !b.applique) appliquerResultat(b);
+  }
+  majProgres(); autosize(); rendreListe();
   $("dictee").focus();
 }
 $("tous").onchange = () => { $("cc").value = $("tous").checked && CTX.reponse ? CTX.reponse.cc_tous : ""; };
@@ -692,34 +728,77 @@ $("b-dicter").onclick = async () => {
 };
 
 // ---------- génération ----------
+function formatTemps(sec) { sec = Math.round(sec); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+function appliquerResultat(b) {
+  const r = b.resultat; b.applique = true;
+  if (r.objet && !$("objet").value) $("objet").value = r.objet;
+  $("corps").value = r.corps; b.corps = r.corps;
+  const u = $("modeles-utilises"), parts = [];
+  if (r.modeles_utilises.length) parts.push("Inspiré de " + r.modeles_utilises.map(m => `<span class="pill">${esc(m)}</span>`).join(""));
+  else if (r.nb_modeles) parts.push("Aucun des " + r.nb_modeles + " modèles n'a été jugé utile.");
+  if (r.nb_envoyes) parts.push("Style appris de " + r.nb_envoyes + " emails envoyés.");
+  u.innerHTML = parts.join(" · "); u.classList.toggle("hidden", !parts.length); b.info = u.innerHTML;
+  if (r.note) toast(r.note, true);
+  $("gen-etat").textContent = "Rédigé en " + formatTemps(b.duree || 0) + (r.modele ? " avec " + r.modele : "") + ". Relisez et corrigez si besoin.";
+  autosize();
+}
+function majProgres() {
+  const b = BROUILLONS[CTX.cle], actif = !!(b && b.tache);
+  $("progres").classList.toggle("hidden", !actif); $("squelette").classList.toggle("hidden", !actif);
+  $("b-generer").disabled = $("b-ajuster").disabled = actif;
+  if (!actif) return;
+  const p = b.progres || {};
+  $("pg-etape").textContent = p.etape || "Démarrage…";
+  const dernier = (p.journal || []).filter(j => j.genre !== "etape" && j.texte !== p.etape).slice(-1)[0];
+  const lent = p.silence > 45;
+  $("progres").classList.toggle("alerte", lent);
+  $("pg-detail").textContent = lent ? "Aucune activité d'agy depuis " + Math.round(p.silence) + " s : connexion Google expirée ou quota atteint ? Vous pouvez annuler et réessayer."
+    : dernier ? dernier.texte : "Le premier démarrage d'agy peut prendre quelques dizaines de secondes.";
+  $("pg-temps").textContent = formatTemps(p.duree || 0);
+}
+async function suivre(cle, b, ajuster) {
+  while (b.tache) {
+    let p;
+    try { p = await api("/api/generation?id=" + b.tache); }
+    catch (e) { b.tache = null; if (cle === CTX.cle) { majProgres(); toast(e.message, true); } rendreListe(); return; }
+    b.progres = p; b.duree = p.duree;
+    if (p.etat === "termine" || p.etat === "erreur" || p.etat === "annule") {
+      b.tache = null;
+      if (p.etat === "termine") {
+        b.resultat = p.resultat; b.applique = false;
+        if (cle === CTX.cle) { appliquerResultat(b); if (ajuster) $("ajustement").value = ""; }
+        else toast("✓ Brouillon prêt : " + (p.resultat.objet || "une autre conversation"));
+      } else if (cle === CTX.cle) { $("gen-etat").textContent = p.etat === "annule" ? "Rédaction annulée." : ""; if (p.etat === "erreur") toast(p.erreur, true); }
+      else if (p.etat === "erreur") toast("Une rédaction a échoué : " + p.erreur, true);
+      if (cle === CTX.cle) majProgres();
+      rendreListe(); return;
+    }
+    if (cle === CTX.cle) majProgres();
+    await new Promise(r => setTimeout(r, 700));
+  }
+}
 async function generer(ajuster) {
   if (!profilId()) return toast("Choisissez un profil.", true);
-  const btn = ajuster ? $("b-ajuster") : $("b-generer");
-  const body = { profil: profilId(), conversation: CTX.texte, dictee: $("dictee").value, objet: $("objet").value };
+  const cle = CTX.cle || "texte", b = BROUILLONS[cle] || (BROUILLONS[cle] = {});
+  if (b.tache) return;
+  const body = { profil: profilId(), conversation: CTX.texte, dictee: $("dictee").value, objet: $("objet").value, async: true, cle };
   if (ajuster) {
     if (!$("corps").value.trim()) return toast("Il n'y a pas encore de brouillon à ajuster.", true);
     body.brouillon_precedent = $("corps").value; body.ajustement = $("ajustement").value;
   }
-  $("gen-etat").textContent = "L'IA rédige… cela peut prendre une minute.";
-  $("squelette").classList.remove("hidden"); $("corps").classList.add("hidden");
-  const t0 = Date.now();
-  await busy(btn, async () => {
+  sauverEtat();
+  try {
     const r = await api("/api/generer", body);
-    if (r.objet && !$("objet").value) $("objet").value = r.objet;
-    $("corps").value = r.corps;
-    const u = $("modeles-utilises"), parts = [];
-    if (r.modeles_utilises.length) parts.push("Inspiré de " + r.modeles_utilises.map(m => `<span class="pill">${esc(m)}</span>`).join(""));
-    else if (r.nb_modeles) parts.push("Aucun des " + r.nb_modeles + " modèles n'a été jugé utile.");
-    if (r.nb_envoyes) parts.push("Style appris de " + r.nb_envoyes + " emails envoyés.");
-    u.innerHTML = parts.join(" · "); u.classList.toggle("hidden", !parts.length);
-    if (r.note) toast(r.note, true);
-    if (ajuster) $("ajustement").value = "";
-    $("gen-etat").textContent = "Rédigé en " + Math.round((Date.now() - t0) / 1000) + " s. Relisez et corrigez si besoin.";
-  });
-  $("squelette").classList.add("hidden"); $("corps").classList.remove("hidden");
-  if ($("gen-etat").textContent.startsWith("L'IA")) $("gen-etat").textContent = "";
-  autosize();
+    b.tache = r.tache; b.progres = { etape: "Démarrage…", duree: 0 }; b.resultat = null;
+  } catch (e) { return toast(e.message, true); }
+  $("gen-etat").textContent = "Vous pouvez ouvrir un autre message pendant la rédaction.";
+  majProgres(); rendreListe();
+  suivre(cle, b, ajuster);
 }
+$("b-annuler").onclick = async () => {
+  const b = BROUILLONS[CTX.cle];
+  if (b && b.tache) { try { await api("/api/annuler", { id: b.tache }); $("pg-etape").textContent = "Annulation…"; } catch (e) { toast(e.message, true); } }
+};
 function autosize() { const c = $("corps"); c.style.height = "auto"; c.style.height = Math.max(280, c.scrollHeight + 4) + "px"; }
 $("corps").addEventListener("input", autosize);
 $("b-generer").onclick = () => generer(false);
@@ -870,6 +949,11 @@ function rendreReglages() {
   $("rg-detecte").innerHTML = ETAT.gemini_trouve ? '<b class="status-ok">✓</b> Commande trouvée : <b>' + esc(ETAT.gemini_trouve) + "</b>"
     : '<b class="status-ko">✕ Commande agy introuvable.</b> Ouvrez les options avancées et collez le résultat de « which agy ».';
 }
+$("b-modeles").onclick = () => busy($("b-modeles"), async () => {
+  const r = await api("/api/modeles");
+  $("liste-modeles").innerHTML = r.modeles.map(m => `<option value="${esc(m)}">`).join("");
+  $("modeles-aide").textContent = r.modeles.length ? r.modeles.length + " modèles disponibles : cliquez dans le champ pour choisir. " : "Aucun modèle reconnu. Sortie d'agy : " + r.brut.slice(0, 300);
+});
 $("b-reglages").onclick = () => busy($("b-reglages"), async () => {
   const v = {}; RG.forEach(k => v[k] = $("rg-" + k).value); v.sources_globales = SRC.rg;
   if ($("rg-jeton_github").value) v.jeton_github = $("rg-jeton_github").value;

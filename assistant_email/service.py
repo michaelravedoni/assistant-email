@@ -6,7 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from . import __version__
 
-from . import brouillon, config, gemini, imap_client, keychain, macos, messages, modeles, prompt, sauvegarde, updater
+from . import (brouillon, config, gemini, imap_client, journal, keychain, macos, messages, modeles, prompt, sauvegarde,
+               taches, updater)
 
 
 def public_profile(p: Dict[str, Any]) -> Dict[str, Any]:
@@ -180,27 +181,67 @@ def _sent_examples(profile: Dict[str, Any]) -> List[str]:
 
 
 def generate(profile_id: str, conversation_text: str, dictation: str, subject_hint: str = "",
-             previous_draft: Optional[str] = None, adjustment: Optional[str] = None) -> Dict[str, Any]:
+             previous_draft: Optional[str] = None, adjustment: Optional[str] = None,
+             tache: Optional[taches.Tache] = None) -> Dict[str, Any]:
+    def etape(texte: str) -> None:
+        if tache is not None:
+            tache.signaler("etape", texte)
+
+    chrono = [("début", time.time())]
+
+    def jalon(nom: str) -> None:
+        chrono.append((nom, time.time()))
+
     profile = config.get_profile(profile_id)
     if previous_draft:
         previous_draft = brouillon.remove_signature(profile, previous_draft)
+    etape("Lecture des modèles…")
     templates = modeles.load_templates(config.template_sources(profile))
+    jalon("modèles")
     note = ""
+    etape("Lecture de vos emails envoyés (style)…")
     try:
         examples = _sent_examples(profile)
     except imap_client.ImapError as exc:
         examples, note = [], "Style des envoyés ignoré (%s)." % exc
+    jalon("envoyés")
     text = prompt.build_prompt(profile, conversation_text, dictation, templates, subject_hint,
                                previous_draft, adjustment, examples)
-    raw = gemini.run(text, config.load_settings())
+    jalon("prompt")
+    etape("Démarrage de l'IA…")
+    raw, info = gemini.run_detailed(text, config.load_settings(),
+                                    on_event=tache.signaler if tache is not None else None,
+                                    cancel=tache.annule if tache is not None else None)
+    jalon("ia")
+    etape("Mise en forme du brouillon…")
     result = prompt.parse_response(raw, subject_hint)
     result["nb_modeles"] = len(templates)
     result["nb_envoyes"] = len(examples)
     result["note"] = note
+    result["modele"] = info.get("modele") or config.load_settings().get("gemini_modele") or ""
+    result["duree_ia"] = info.get("duree")
+    result["taille_prompt"] = len(text)
+    detail = ", ".join("%s %.1f s" % (n, t - chrono[i][1]) for i, (n, t) in enumerate(chrono[1:]))
+    journal.ecrire("rédaction : %s ; prompt %d Ko ; modèle %s" % (detail, len(text) // 1024, result["modele"] or "défaut"))
     if not result["corps"]:
         raise gemini.GeminiError("Réponse de l'IA vide ou illisible :\n" + raw[-1000:])
     result["corps"] = brouillon.add_signature(profile, result["corps"])
     return result
+
+
+def start_generation(cle: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    config.get_profile(args["profil"])      # échoue tout de suite si le profil n'existe pas
+
+    def travail(tache: taches.Tache) -> Dict[str, Any]:
+        return generate(args["profil"], args.get("conversation", ""), args.get("dictee", ""), args.get("objet", ""),
+                        args.get("brouillon_precedent"), args.get("ajustement"), tache)
+
+    erreurs = (imap_client.ImapError, gemini.GeminiError, ValueError, KeyError, OSError)
+    return {"tache": taches.demarrer(cle, travail, erreurs).id}
+
+
+def list_models() -> Dict[str, Any]:
+    return gemini.list_models(config.load_settings())
 
 
 def full_text(profile_id: str, body: str, quote: Optional[Dict[str, Any]] = None) -> str:

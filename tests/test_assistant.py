@@ -3,6 +3,7 @@ import imaplib
 import json
 import os
 import sys
+import time
 import tempfile
 import unittest
 import urllib.request
@@ -417,6 +418,45 @@ class TestServeur(unittest.TestCase):
         code, ev = self.call("/api/evenements")
         self.assertEqual(ev, {"actions": []})
         self.assertTrue(server.window_is_open())
+
+    def _attendre(self, tid, etats=("termine", "erreur", "annule"), delai=15):
+        fin = time.time() + delai
+        while time.time() < fin:
+            code, t = self.call("/api/generation?id=" + tid)
+            self.assertEqual(code, 200, t)
+            if t["etat"] in etats:
+                return t
+            time.sleep(0.1)
+        self.fail("tâche trop longue")
+
+    def test_redaction_en_arriere_plan(self):
+        p = profil()
+        code, r = self.call("/api/generer", {"profil": p["id"], "conversation": "Bonjour", "dictee": "ok", "async": True,
+                                             "cle": "a"})
+        self.assertEqual(code, 200, r)
+        t = self._attendre(r["tache"])
+        self.assertEqual(t["etat"], "termine", t)
+        self.assertIn("6 semaines", t["resultat"]["corps"])
+        self.assertEqual(t["resultat"]["modele"], "gemini-3-flash")      # modèle lu dans la réponse d'agy
+        self.assertTrue(any(j["genre"] == "etape" for j in t["journal"]) or t["etape"])
+
+    def test_annulation(self):
+        p = profil()
+        os.environ["FAKE_GEMINI_SLEEP"] = "20"
+        try:
+            code, r = self.call("/api/generer", {"profil": p["id"], "conversation": "Bonjour", "dictee": "ok", "async": True})
+            self._attendre(r["tache"], etats=("en_cours",))
+            time.sleep(0.5)
+            self.assertEqual(self.call("/api/annuler", {"id": r["tache"]})[0], 200)
+            t = self._attendre(r["tache"])
+            self.assertEqual(t["etat"], "annule", t)
+        finally:
+            os.environ.pop("FAKE_GEMINI_SLEEP", None)
+
+    def test_liste_des_modeles(self):
+        code, r = self.call("/api/modeles")
+        self.assertEqual(code, 200, r)
+        self.assertEqual(r["modeles"], ["gemini-3-pro", "gemini-3-flash", "claude-sonnet-5"])
 
 
 if __name__ == "__main__":

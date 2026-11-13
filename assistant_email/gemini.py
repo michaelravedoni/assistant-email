@@ -11,12 +11,15 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .prompt import INSTRUCTION_COURTE
 
@@ -119,7 +122,8 @@ def _find_response(obj: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
-def parse_agy_output(stdout: str) -> str:
+def parse_agy(stdout: str) -> Tuple[str, Dict[str, Any]]:
+    """Texte de la réponse et informations utiles (modèle, durée) lues dans l'enveloppe JSON d'agy."""
     candidates = []
     try:
         candidates.append(json.loads(stdout))
@@ -137,11 +141,50 @@ def parse_agy_output(stdout: str) -> str:
         if found:
             envelope = found  # on garde le dernier (événement « result » final)
     if envelope is None:
-        return stdout.strip()  # sortie texte brute
+        return stdout.strip(), {}  # sortie texte brute
     status = str(envelope.get("status") or "SUCCESS").upper()
     if envelope.get("error") or status not in ("SUCCESS", "OK"):
         raise GeminiError(_explain("%s : %s" % (status, envelope.get("error") or "réponse vide")))
-    return str(envelope.get("response") or "").strip()
+    info = {}
+    for key in ("model", "model_name", "modele"):
+        if isinstance(envelope.get(key), str) and envelope[key].strip():
+            info["modele"] = envelope[key].strip()
+            break
+    return str(envelope.get("response") or "").strip(), info
+
+
+def parse_agy_output(stdout: str) -> str:
+    return parse_agy(stdout)[0]
+
+
+_ENTETES = {"available", "models", "model", "name", "id", "default", "usage", "modèles", "modele", "modèle"}
+
+
+def list_models(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Modèles proposés par agy (« agy models ») : la liste évolue avec le temps, on la relit à la demande."""
+    path = find_gemini(settings.get("gemini_chemin", ""))
+    if not path:
+        raise GeminiError("Commande « agy » introuvable : indiquez son chemin dans les réglages.")
+    if not is_agy(path):
+        raise GeminiError("La liste des modèles n'est disponible qu'avec agy.")
+    try:
+        res = subprocess.run([path, "models"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             timeout=45, env=_env_with(path), stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise GeminiError("« agy models » n'a pas répondu à temps.")
+    except OSError as exc:
+        raise GeminiError("Impossible de lancer agy : %s" % exc)
+    brut = (res.stdout or "").strip()
+    if res.returncode != 0 and not brut:
+        raise GeminiError(_explain("(code %s) %s" % (res.returncode, res.stderr or "")))
+    noms: List[str] = []
+    for line in brut.splitlines():
+        line = re.sub(r"^[\s\-*•>·]+", "", line.strip())
+        token = re.split(r"[\s(,;|]", line, maxsplit=1)[0].strip("`'\"") if line else ""
+        if (re.match(r"^[A-Za-z][\w.\-:/]{2,}$", token) and not token.endswith(":")
+                and token.lower() not in _ENTETES and token not in noms):
+            noms.append(token)
+    return {"modeles": noms, "brut": brut[-3000:]}
 
 
 def _explain(err: str) -> str:
@@ -156,7 +199,48 @@ def _explain(err: str) -> str:
     return "L'IA a échoué.%s\n%s" % (hint, err.strip()[-1500:])
 
 
-def run(prompt: str, settings: Dict[str, Any]) -> str:
+def _fermer(proc: "subprocess.Popen") -> None:
+    for flux in (proc.stdout, proc.stderr):
+        try:
+            flux.close()
+        except OSError:
+            pass
+
+
+def _arreter(proc: "subprocess.Popen") -> None:
+    proc.kill()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+    _fermer(proc)
+
+
+class Cancelled(GeminiError):
+    pass
+
+
+def _label(line: str) -> str:
+    """Une ligne de sortie d'agy, résumée pour l'affichage (événements JSON ou texte)."""
+    line = line.strip()
+    if line.startswith("{"):
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            return ""
+        if isinstance(obj, dict):
+            name = obj.get("event") or obj.get("type") or ""
+            step = obj.get("step") if isinstance(obj.get("step"), dict) else {}
+            detail = step.get("type") or obj.get("status") or ""
+            return " · ".join(x for x in (str(name), str(detail)) if x)[:120]
+        return ""
+    return line[:160]
+
+
+def run_detailed(prompt: str, settings: Dict[str, Any], on_event: Optional[Callable[[str, str], None]] = None,
+                 cancel: Optional[threading.Event] = None) -> Tuple[str, Dict[str, Any]]:
+    """Lance l'IA et renvoie (texte, infos). on_event(type, texte) signale l'avancement ; cancel l'interrompt."""
+    emit = on_event or (lambda kind, text: None)
     path = find_gemini(settings.get("gemini_chemin", ""))
     if not path:
         raise GeminiError("Commande « agy » introuvable. Indiquez son chemin dans les réglages "
@@ -167,21 +251,72 @@ def run(prompt: str, settings: Dict[str, Any]) -> str:
         cmd = [path] + (["-m", settings["gemini_modele"]] if settings.get("gemini_modele") else [])
         cmd += ["-p", INSTRUCTION_COURTE]
         stdin = prompt
+    delai = int(settings.get("gemini_delai", 240))
     workdir = tempfile.mkdtemp(prefix="assistant-email-")  # dossier vide : l'IA n'a rien à lire
+    t0 = time.time()
+    out: List[str] = []
+    err: List[str] = []
+    activite = [t0]
     try:
-        res = subprocess.run(cmd, input=stdin or "", capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=workdir,
-                             env=_env_with(path), timeout=int(settings.get("gemini_delai", 240)) + 30)
-    except subprocess.TimeoutExpired:
-        raise GeminiError("L'IA n'a pas répondu à temps. Réessayez ou augmentez le délai dans les réglages.")
-    except OSError as exc:
-        raise GeminiError("Impossible de lancer %s : %s" % (os.path.basename(path), exc))
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    cwd=workdir, env=_env_with(path), text=True, encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise GeminiError("Impossible de lancer %s : %s" % (os.path.basename(path), exc))
+        emit("demarrage", "%s lancé, connexion et chargement…" % os.path.basename(path))
+
+        def ecrire():
+            try:
+                proc.stdin.write(stdin or "")
+            except OSError:
+                pass
+            finally:
+                try:
+                    proc.stdin.close()
+                except OSError:
+                    pass
+
+        def lire(flux, store, kind):
+            try:
+                for line in flux:
+                    store.append(line)
+                    activite[0] = time.time()
+                    label = _label(line)
+                    if label:
+                        emit(kind, label)
+            except (ValueError, OSError):      # flux fermé pendant l'arrêt du processus
+                pass
+
+        threads = [threading.Thread(target=ecrire, daemon=True),
+                   threading.Thread(target=lire, args=(proc.stdout, out, "sortie"), daemon=True),
+                   threading.Thread(target=lire, args=(proc.stderr, err, "info"), daemon=True)]
+        for t in threads:
+            t.start()
+        while proc.poll() is None:
+            if cancel is not None and cancel.is_set():
+                _arreter(proc)
+                raise Cancelled("Rédaction annulée.")
+            if time.time() - t0 > delai + 30:
+                _arreter(proc)
+                raise GeminiError("L'IA n'a pas répondu à temps (%d s). Réessayez ou augmentez le délai dans les "
+                                  "réglages." % (delai + 30))
+            time.sleep(0.15)
+        for t in threads[1:]:
+            t.join(timeout=5)
+        _fermer(proc)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-    out = res.stdout.strip()
-    if is_agy(path) and out:
-        text = parse_agy_output(out)
-        if res.returncode == 0 and text:
-            return text
-    if res.returncode != 0 or not out:
-        raise GeminiError(_explain("(code %s) %s" % (res.returncode, (res.stderr or res.stdout or "").strip())))
-    return out
+    stdout, stderr = "".join(out).strip(), "".join(err).strip()
+    info: Dict[str, Any] = {"duree": round(time.time() - t0, 1), "commande": os.path.basename(path)}
+    if is_agy(path) and stdout:
+        text, meta = parse_agy(stdout)
+        info.update(meta)
+        if proc.returncode == 0 and text:
+            return text, info
+    if proc.returncode != 0 or not stdout:
+        raise GeminiError(_explain("(code %s) %s" % (proc.returncode, (stderr or stdout).strip())))
+    return stdout, info
+
+
+def run(prompt: str, settings: Dict[str, Any]) -> str:
+    return run_detailed(prompt, settings)[0]
