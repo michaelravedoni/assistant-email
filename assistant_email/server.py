@@ -46,6 +46,7 @@ def _routes() -> Dict[Tuple[str, str], Callable[[Dict[str, Any]], Any]]:
         ("POST", "/api/mise-a-jour/telecharger"): lambda b: service.download_update(b["url"], b["nom"]),
         ("POST", "/api/sauvegarde/exporter"): lambda b: service.export_settings(),
         ("POST", "/api/sauvegarde/importer"): lambda b: service.import_settings(b["chemin"]),
+        ("POST", "/api/ouvrir-journal"): lambda b: macos.reveal(str(config.app_home() / "journal.log")) or {"ok": True},
         ("POST", "/api/ouvrir-sauvegardes"): lambda b: macos.open_path(str(sauvegarde.dossier())) or {"ok": True},
         ("POST", "/api/profils"): lambda b: service.save_profile(b),
         ("POST", "/api/profils/supprimer"): lambda b: service.delete_profile(b["id"]) or {"ok": True},

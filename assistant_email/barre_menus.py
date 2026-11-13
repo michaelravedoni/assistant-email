@@ -32,6 +32,7 @@ class AssistantApp(rumps.App):
             None,
             rumps.MenuItem("Profils et réglages", callback=lambda _: self.show("profils")),
             rumps.MenuItem("Rechercher une mise à jour…", callback=lambda _: self.show("mise-a-jour")),
+            rumps.MenuItem("Ouvrir le journal", callback=self.ouvrir_journal),
             None,
             rumps.MenuItem("Quitter", callback=self.quit),
         ]
@@ -100,6 +101,10 @@ class AssistantApp(rumps.App):
                 detail = ""
             journal.ecrire("la fenêtre s'est fermée avec le code %s\n%s" % (code, detail))
             webbrowser.open(url)
+
+    def ouvrir_journal(self, _sender) -> None:
+        journal.ecrire("journal ouvert depuis le menu")      # crée le fichier s'il n'existe pas encore
+        macos.reveal(str(config.app_home() / "journal.log"))
 
     def quit(self, _sender) -> None:
         if self.window is not None and self.window.poll() is None:
