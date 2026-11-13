@@ -60,6 +60,12 @@ Vous pouvez ouvrir un autre message pendant ce temps (jusqu'à 3 rédactions en 
 conversation et signalés dans la liste. Le modèle d'IA se choisit dans Réglages › Options avancées (« Charger la liste »
 interroge agy). Chaque rédaction écrit ses durées dans `journal.log` (modèles, envoyés, démarrage d'agy, réponse).
 
+## Résumé du fil et dictée
+Pour un fil de plusieurs messages, **Résumer le fil** affiche en tête de conversation qui demande quoi, les engagements pris
+et ce qui attend une réponse (automatique pour 3 messages ou plus si vous le cochez dans Réglages › Dictée et résumés).
+Le moteur de dictée se choisit dans les mêmes réglages : dictée macOS, ou **OpenWhispr** (application séparée, Intel et
+Apple Silicon) : « Dicter » place le curseur dans le champ et OpenWhispr y colle le texte quand vous utilisez son raccourci.
+
 ## Non lus et suivis
 
 La liste de la boîte affiche une pastille bleue pour les non lus et une étoile pour les suivis. Filtres **Tous / Non lus / ★** (le dernier choix est mémorisé par profil) et tri par date, non lus d'abord ou suivis d'abord. Ouvrir un message dans l'assistant **ne le marque jamais comme lu** : les boutons « Marquer lu » et « Suivre » en haut de la conversation sont les seules écritures faites sur vos messages, et seulement quand vous cliquez.

@@ -111,3 +111,26 @@ def parse_response(text: str, fallback_subject: str = "") -> Dict[str, Any]:
         "corps": _strip_markdown(body),
         "modeles_utilises": used_list,
     }
+
+
+def build_summary_prompt(profile: Dict[str, Any], conversation: str) -> str:
+    me = profile.get("nom_affiche") or profile.get("nom") or ""
+    return """Tu aides %s à lire un fil d'emails. Résume la conversation ci-dessous en français, en 3 à 5 lignes courtes, texte brut sans Markdown :
+- qui demande quoi, et depuis quand ;
+- les décisions, dates, montants ou engagements déjà pris ;
+- ce qui attend encore une réponse de %s.
+N'invente rien. N'utilise aucun outil et ne lis aucun fichier : tout est dans ce message.
+
+# Conversation (du plus ancien au plus récent)
+%s
+
+# Format de réponse (obligatoire)
+<resume>
+le résumé
+</resume>
+""" % (me, me or "ma part", conversation.strip())
+
+
+def parse_summary(text: str) -> str:
+    found = _tag(text, "resume")
+    return _strip_markdown(found if found is not None else text)

@@ -144,6 +144,11 @@ textarea { resize: vertical; line-height: 1.55; }
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
 .actions .grow { flex: 1; }
 .check { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12.5px; cursor: pointer; }
+.resume { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--accent-soft); font-size: 13px; }
+.resume .rs-tete { display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.resume .rs-tete .grow { flex: 1; }
+.resume .rs-texte { margin-top: 6px; white-space: pre-wrap; color: var(--text, inherit); line-height: 1.45; }
+.resume .btn { padding: 2px 10px; font-size: 12px; }
 .progres { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-2); font-size: 13px; }
 .progres .pg-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .progres .pg-texte span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -473,6 +478,19 @@ textarea { resize: vertical; line-height: 1.55; }
         </div>
       </div>
       <div class="form-section">
+        <h3>Dictée et résumés</h3>
+        <div class="form-grid">
+          <div class="f"><label>Moteur de dictée</label>
+            <select id="rg-dictee_moteur"><option value="macos">Dictée macOS (intégrée)</option><option value="openwhispr">OpenWhispr (application externe)</option></select>
+            <div class="help">Avec OpenWhispr, le bouton « Dicter » place le curseur dans le champ : lancez la dictée avec le raccourci d'OpenWhispr, le texte s'y colle.</div></div>
+          <div class="f"><label>Raccourci OpenWhispr</label><input type="text" id="rg-dictee_raccourci" placeholder="fn (touche globe)" autocapitalize="off">
+            <div class="help">Pour mémoire : affiché comme rappel sous le champ de dictée.</div>
+            <button class="btn ghost" id="b-openwhispr" type="button" style="margin-top:6px">Ouvrir OpenWhispr</button></div>
+          <div class="f full"><label class="check"><input type="checkbox" id="rg-resume_auto"> Résumer automatiquement les fils de 3 messages ou plus</label>
+            <div class="help">Chaque résumé est un appel à l'IA en plus (quota de l'abonnement). Sinon, un bouton « Résumer le fil » est proposé.</div></div>
+        </div>
+      </div>
+      <div class="form-section">
         <h3>Mises à jour <span id="rg-version" class="help" style="text-transform:none;letter-spacing:0"></span></h3>
         <div class="form-grid">
           <div class="f"><label>Dépôt GitHub</label><input type="text" id="rg-depot_github" placeholder="propriétaire/dépôt" autocapitalize="off" spellcheck="false"></div>
@@ -705,7 +723,7 @@ function montrerConversation(data, meta) {
   $("inline-titre").textContent = "Conversation : " + $("conv-titre").textContent; $("inline-texte").textContent = CTX.texte;
   const r = CTX.reponse;
   $("a").value = r ? r.a : ""; $("objet").value = r ? r.objet : ""; $("tous").checked = false; $("cc").value = "";
-  $("corps").value = ""; $("modeles-utilises").classList.add("hidden"); $("dictee").value = ""; $("gen-etat").textContent = "";
+  $("corps").value = ""; $("modeles-utilises").classList.add("hidden"); $("dictee").value = ""; $("gen-etat").textContent = texteAideDictee();
   const b = BROUILLONS[CTX.cle];
   if (b) {
     $("dictee").value = b.dictee || ""; $("a").value = b.a || $("a").value; $("cc").value = b.cc || ""; $("objet").value = b.objet || $("objet").value;
@@ -713,14 +731,29 @@ function montrerConversation(data, meta) {
     if (b.info) { $("modeles-utilises").innerHTML = b.info; $("modeles-utilises").classList.remove("hidden"); }
     if (b.resultat && !b.applique) appliquerResultat(b);
   }
+  CTX.nbMessages = msgs.length || (CTX.texte ? 1 : 0);
+  rendreResume();
+  if (ETAT.reglages.resume_auto && msgs.length >= 3) lancerResume(CTX.cle, false);
   majProgres(); autosize(); rendreListe();
   $("dictee").focus();
 }
 $("tous").onchange = () => { $("cc").value = $("tous").checked && CTX.reponse ? CTX.reponse.cc_tous : ""; };
 
 // ---------- dictée macOS ----------
+const MOTEUR_DEFAUT = "Dictée macOS : bouton ci-contre ou touche Fn deux fois.";
+function moteurDictee() { return (ETAT.reglages && ETAT.reglages.dictee_moteur) || "macos"; }
+function texteAideDictee() {
+  if (moteurDictee() !== "openwhispr") return MOTEUR_DEFAUT;
+  const k = (ETAT.reglages.dictee_raccourci || "").trim();
+  return "OpenWhispr : " + (k ? "raccourci " + k : "votre raccourci") + " pour dicter, le texte arrive dans ce champ.";
+}
+function majMoteurDictee() {
+  $("b-dicter").title = moteurDictee() === "openwhispr" ? "Placer le curseur pour dicter avec OpenWhispr" : "Démarrer la dictée macOS";
+  const e = $("gen-etat"); if (!e.textContent || e.textContent === MOTEUR_DEFAUT || e.textContent.startsWith("OpenWhispr :")) e.textContent = texteAideDictee();
+}
 $("b-dicter").onclick = async () => {
   $("dictee").focus();
+  if (moteurDictee() === "openwhispr") { $("gen-etat").textContent = texteAideDictee(); return; }
   const native = window.pywebview && window.pywebview.api && window.pywebview.api.dicter;
   let ok = false;
   if (native) { try { ok = await window.pywebview.api.dicter(); } catch (e) {} }
@@ -729,6 +762,31 @@ $("b-dicter").onclick = async () => {
 };
 
 // ---------- génération ----------
+function rendreResume() {
+  const th = $("thread"); let box = $("resume-box");
+  const b = BROUILLONS[CTX.cle] || {};
+  const nb = (CTX.nbMessages || 0);
+  if (!CTX.texte || (nb < 2 && !b.resume)) { if (box) box.remove(); return; }
+  if (!box) { box = document.createElement("div"); box.id = "resume-box"; box.className = "resume"; th.prepend(box); }
+  if (b.resume) box.innerHTML = '<div class="rs-tete"><span class="grow">Résumé du fil</span><button class="btn ghost" id="b-resume">Actualiser</button></div><div class="rs-texte">' + esc(b.resume) + "</div>";
+  else if (b.resTache) box.innerHTML = '<div class="rs-tete"><span class="spin"></span><span class="grow">Résumé du fil en cours…</span></div>';
+  else box.innerHTML = '<div class="rs-tete"><span class="grow">Fil de ' + nb + ' messages</span><button class="btn ghost" id="b-resume">Résumer le fil</button></div>';
+  const bt = $("b-resume"); if (bt) bt.onclick = () => lancerResume(CTX.cle, true);
+}
+async function lancerResume(cle, force) {
+  const b = BROUILLONS[cle] || (BROUILLONS[cle] = {});
+  if (b.resTache || (b.resume && !force)) return;
+  try { b.resTache = (await api("/api/resumer", { profil: profilId(), conversation: CTX.texte, cle })).tache; }
+  catch (e) { return toast(e.message, true); }
+  rendreResume();
+  while (b.resTache) {
+    await new Promise(r => setTimeout(r, 800));
+    let p; try { p = await api("/api/generation?id=" + b.resTache); } catch (e) { b.resTache = null; break; }
+    if (p.etat === "termine") { b.resume = p.resultat.resume; b.resTache = null; }
+    else if (p.etat === "erreur" || p.etat === "annule") { b.resTache = null; if (cle === CTX.cle) toast(p.erreur || "Résumé annulé.", true); }
+  }
+  if (cle === CTX.cle) rendreResume();
+}
 function formatTemps(sec) { sec = Math.round(sec); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
 function appliquerResultat(b) {
   const r = b.resultat; b.applique = true;
@@ -941,22 +999,24 @@ $("b-supprimer").onclick = () => busy($("b-supprimer"), async () => {
 });
 
 // ---------- réglages ----------
-const RG = ["gemini_chemin", "gemini_modele", "gemini_delai", "nb_messages", "port", "depot_github"];
+const RG = ["gemini_chemin", "gemini_modele", "gemini_delai", "nb_messages", "port", "depot_github", "dictee_moteur", "dictee_raccourci"];
 function rendreReglages() {
   RG.forEach(k => $("rg-" + k).value = ETAT.reglages[k] == null ? "" : ETAT.reglages[k]);
+  $("rg-resume_auto").checked = !!ETAT.reglages.resume_auto; majMoteurDictee();
   SRC.rg = (ETAT.reglages.sources_globales || []).map(s => ({ ...s })); rendreSources("rg");
   $("rg-version").textContent = "· version " + (ETAT.version || "");
   $("rg-jeton-etat").innerHTML = ETAT.jeton_github ? '<span class="status-ok">· enregistré</span>' : "";
   $("rg-detecte").innerHTML = ETAT.gemini_trouve ? '<b class="status-ok">✓</b> Commande trouvée : <b>' + esc(ETAT.gemini_trouve) + "</b>"
     : '<b class="status-ko">✕ Commande agy introuvable.</b> Ouvrez les options avancées et collez le résultat de « which agy ».';
 }
+$("b-openwhispr").onclick = () => busy($("b-openwhispr"), async () => { await api("/api/ouvrir-dictee", {}); toast("✓ OpenWhispr ouvert."); });
 $("b-modeles").onclick = () => busy($("b-modeles"), async () => {
   const r = await api("/api/modeles");
   $("liste-modeles").innerHTML = r.modeles.map(m => `<option value="${esc(m)}">`).join("");
   $("modeles-aide").textContent = r.modeles.length ? r.modeles.length + " modèles disponibles : cliquez dans le champ pour choisir. " : "Aucun modèle reconnu. Sortie d'agy : " + r.brut.slice(0, 300);
 });
 $("b-reglages").onclick = () => busy($("b-reglages"), async () => {
-  const v = {}; RG.forEach(k => v[k] = $("rg-" + k).value); v.sources_globales = SRC.rg;
+  const v = {}; RG.forEach(k => v[k] = $("rg-" + k).value); v.sources_globales = SRC.rg; v.resume_auto = $("rg-resume_auto").checked;
   if ($("rg-jeton_github").value) v.jeton_github = $("rg-jeton_github").value;
   await api("/api/reglages", v); await charger(); toast("✓ Réglages enregistrés.");
 });

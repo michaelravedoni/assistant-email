@@ -62,6 +62,8 @@ def _routes() -> Dict[Tuple[str, str], Callable[[Dict[str, Any]], Any]]:
         ("POST", "/api/copier"): lambda b: macos.copy_to_clipboard(b["texte"]) or {"ok": True},
         ("GET", "/api/evenements"): _poll_events,
         ("POST", "/api/generer"): _generer,
+        ("POST", "/api/resumer"): lambda b: service.start_summary(b.get("cle", ""), b),
+        ("POST", "/api/ouvrir-dictee"): lambda b: service.open_dictation_app(),
         ("GET", "/api/generation"): lambda q: service.taches.lire(q["id"]),
         ("POST", "/api/annuler"): lambda b: service.taches.annuler(b["id"]),
         ("GET", "/api/modeles"): lambda q: service.list_models(),

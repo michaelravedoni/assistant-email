@@ -27,6 +27,9 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "nb_messages": 40,
     "sources_globales": [],   # sources de modèles partagées par tous les profils
     "depot_github": "michaelravedoni/assistant-email",       # « propriétaire/dépôt » où chercher les mises à jour
+    "dictee_moteur": "macos",   # « macos » (dictée du système) ou « openwhispr » (application externe)
+    "dictee_raccourci": "",     # raccourci OpenWhispr, affiché en aide (vide : touche par défaut)
+    "resume_auto": False,       # résumer automatiquement les fils de 3 messages ou plus
 }
 
 DEFAULT_PROFILE: Dict[str, Any] = {
@@ -80,6 +83,9 @@ def save_settings(values: Dict[str, Any]) -> Dict[str, Any]:
             data[key] = values[key]
     for key in ("gemini_delai", "port", "nb_messages"):
         data[key] = int(data[key])
+    data["resume_auto"] = str(data.get("resume_auto")).lower() in ("true", "1", "oui")
+    if data.get("dictee_moteur") not in ("macos", "openwhispr"):
+        data["dictee_moteur"] = "macos"
     data["sources_globales"] = clean_sources(data.get("sources_globales"))
     _write_json(app_home() / "reglages.json", data)
     return data

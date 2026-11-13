@@ -240,6 +240,29 @@ def start_generation(cle: str, args: Dict[str, Any]) -> Dict[str, Any]:
     return {"tache": taches.demarrer(cle, travail, erreurs).id}
 
 
+def start_summary(cle: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    profile = config.get_profile(args["profil"])
+    if not (args.get("conversation") or "").strip():
+        raise ValueError("Aucune conversation à résumer.")
+
+    def travail(tache: taches.Tache) -> Dict[str, Any]:
+        tache.signaler("etape", "Résumé du fil…")
+        raw, info = gemini.run_detailed(prompt.build_summary_prompt(profile, args["conversation"]), config.load_settings(),
+                                        on_event=tache.signaler, cancel=tache.annule)
+        resume = prompt.parse_summary(raw)
+        if not resume:
+            raise gemini.GeminiError("Résumé vide ou illisible.")
+        return {"resume": resume, "modele": info.get("modele", ""), "duree_ia": info.get("duree")}
+
+    erreurs = (imap_client.ImapError, gemini.GeminiError, ValueError, KeyError, OSError)
+    return {"tache": taches.demarrer(cle, travail, erreurs).id}
+
+
+def open_dictation_app() -> Dict[str, Any]:
+    macos.open_app("OpenWhispr")
+    return {"ok": True}
+
+
 def list_models() -> Dict[str, Any]:
     return gemini.list_models(config.load_settings())
 

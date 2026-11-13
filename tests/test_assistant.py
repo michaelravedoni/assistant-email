@@ -453,6 +453,23 @@ class TestServeur(unittest.TestCase):
         finally:
             os.environ.pop("FAKE_GEMINI_SLEEP", None)
 
+    def test_resume_du_fil(self):
+        p = profil()
+        code, r = self.call("/api/resumer", {"profil": p["id"], "conversation": "Claire : bonjour\nMoi : ok", "cle": "r"})
+        self.assertEqual(code, 200, r)
+        t = self._attendre(r["tache"])
+        self.assertEqual(t["etat"], "termine", t)
+        self.assertTrue(t["resultat"]["resume"])
+        code, err = self.call("/api/resumer", {"profil": p["id"], "conversation": "  ", "cle": "r"})
+        self.assertEqual(code, 400)
+
+    def test_reglages_dictee(self):
+        out = service.save_settings({"dictee_moteur": "bidule", "resume_auto": "true", "dictee_raccourci": "fn"})
+        self.assertEqual((out["dictee_moteur"], out["resume_auto"]), ("macos", True))
+        out = service.save_settings({"dictee_moteur": "openwhispr", "resume_auto": False})
+        self.assertEqual((out["dictee_moteur"], out["resume_auto"]), ("openwhispr", False))
+        service.save_settings({"dictee_moteur": "macos"})
+
     def test_liste_des_modeles(self):
         code, r = self.call("/api/modeles")
         self.assertEqual(code, 200, r)

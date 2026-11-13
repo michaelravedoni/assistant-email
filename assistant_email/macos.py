@@ -74,6 +74,15 @@ def open_path(path: str) -> None:
         subprocess.run(["open", path], capture_output=True)
 
 
+def open_app(name: str) -> None:
+    """Lance une application par son nom (« open -a »)."""
+    if not IS_MAC:
+        raise MacError("Disponible uniquement sur macOS.")
+    res = subprocess.run(["open", "-a", name], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if res.returncode != 0:
+        raise MacError("Impossible d'ouvrir « %s » : l'application n'est pas installée ou porte un autre nom." % name)
+
+
 def reveal(path: str) -> None:
     if IS_MAC:
         subprocess.run(["open", "-R", path], capture_output=True)
